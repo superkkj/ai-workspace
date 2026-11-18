@@ -52,6 +52,8 @@ jobs:
         run: npm test
       - name: Build
         run: npm run build
+      - name: Adapt generated config for local HTTP runtime
+        run: node "$GITHUB_WORKSPACE/.github/tools/yeoreojwo-http-runtime/prepare-config.mjs" dist/server/wrangler.json
       - name: Prepare local D1 for HTTP checks
         run: node --import ./scripts/sites-env.mjs "$YEOREOJWO_WRANGLER_CLI" d1 execute DB --local --config dist/server/wrangler.json --persist-to .wrangler/state --file drizzle/0000_famous_toro.sql
       - name: Check HTTP API with local D1

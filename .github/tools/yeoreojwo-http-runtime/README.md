@@ -16,4 +16,6 @@ Node.js 24에서 이 디렉터리의 `npm ci`로 설치합니다. 실제 실행 
 
 생성된 `dist/server/wrangler.json`의 `no_bundle` 설정은 유지합니다. 요청을 자동 재시도하거나 인증·Origin 검사를 완화하지 않습니다. 8 KiB 본문의 인증·출처 거절 직후 다음 POST가 정상 응답하는 20쌍 검사와 기존 HTTP 사용 흐름 검사를 함께 실행합니다.
 
+새 Wrangler가 제거한 `legacy_env` 필드 때문에 `prepare-config.mjs`를 빌드 후 실행합니다. 이 스크립트는 생성된 로컬 검사 설정의 `legacy_env: true`만 제거합니다. 새 도구의 기본 동작과 같으며, 다른 값이면 실패합니다. Worker JS·정적 파일·DB 바인딩·`no_bundle`을 수정하지 않고, 호스팅에 배포한 설정도 변경하지 않습니다. 관련 설명은 [Cloudflare 환경 설정 문서](https://developers.cloudflare.com/workers/wrangler/environments/)를 참고합니다.
+
 이 도구는 HTTP loopback 테스트용입니다. 실제 호스팅의 인증, 원격 D1 부하, 다계정 브라우저 사용을 검증한 것으로 보지 않습니다. 실제 성공·실패 기록은 [CHECKS.md](../../../docs/ai/CHECKS.md)에 남깁니다.
