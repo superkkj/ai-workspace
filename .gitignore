@@ -1,0 +1,28 @@
+# Local secret/configuration files
+.env
+.env.*
+!.env.example
+!.env.sample
+secrets/
+*.pem
+*.key
+*.p12
+*.pfx
+
+# Dependencies and generated output
+node_modules/
+dist/
+.gradle/
+build/
+target/
+.venv/
+venv/
+__pycache__/
+*.py[cod]
+*.log
+
+# Local OS/editor files
+.DS_Store
+Thumbs.db
+*.swp
+*.swo
