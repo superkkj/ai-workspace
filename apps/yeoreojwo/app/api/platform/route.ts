@@ -14,26 +14,36 @@ function service(): PlatformService {
   return new PlatformService(env.DB);
 }
 
-function failure(error: unknown): Response {
+function failure(error: unknown, stage: string): Response {
   if (error instanceof DomainError) return response({ error: error.message, code: error.code }, error.status);
   // Never return SQL, identity values, or request bodies in public errors.
-  console.error('[platform] storage operation failed');
+  const errorType = error instanceof TypeError ? 'TypeError' : error instanceof RangeError ? 'RangeError' : 'Error';
+  const errorCodes = error instanceof Error ? [...new Set(error.message.match(/\b(?:D1|SQLITE)_[A-Z_]+\b/g) ?? [])] : [];
+  // Fixed stage, error class and code tokens are enough to distinguish auth,
+  // body and storage failures without logging raw messages or user values.
+  console.error('[platform] operation failed', { stage, errorType, errorCodes });
   return response({ error: '저장소에 연결하지 못했어요. 잠시 뒤 다시 시도해 주세요.', code: 'STORAGE_ERROR' }, 503);
 }
 
 export async function GET(request: Request): Promise<Response> {
+  let stage = 'read-link';
   try {
     const focusedRequestId = validateFocusedRequestId(new URL(request.url).searchParams.get('request'));
+    stage = 'read-auth';
     const user = await getChatGPTUser();
+    stage = 'read-snapshot';
     return response(await service().snapshot(user?.userId ?? null, focusedRequestId));
-  } catch (error) { return failure(error); }
+  } catch (error) { return failure(error, stage); }
 }
 
 export async function POST(request: Request): Promise<Response> {
+  let stage = 'write-auth';
   try {
     const user = await getChatGPTUser();
     if (!user) throw new DomainError('SIGN_IN_REQUIRED', '로그인하면 참여할 수 있어요.', 401);
+    stage = 'write-body';
     const body = await readMutationBody(request);
+    stage = 'write-command';
     return response(await service().execute(user.userId, body));
-  } catch (error) { return failure(error); }
+  } catch (error) { return failure(error, stage); }
 }

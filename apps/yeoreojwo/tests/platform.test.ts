@@ -145,6 +145,30 @@ test('비로그인과 공개 닉네임 미설정 사용자의 쓰기를 거절�
   await assert.rejects(f.service.execute('new-private-id', { action: 'interest', requestId: f.requestId, interested: true }), { code: 'PROFILE_REQUIRED' });
 });
 
+test('첫 로그인 사용자는 닉네임이 없어도 공유 요청을 조회하고 설정 뒤 관심으로 이어간다', async (t) => {
+  const f = await fixture(); t.after(() => f.database.close());
+  const newcomer = 'newcomer-without-profile';
+  for (const focusedId of [undefined, f.requestId]) {
+    const snapshot = await f.service.snapshot(newcomer, focusedId);
+    assert.equal(snapshot.viewer.signedIn, true);
+    assert.equal(snapshot.viewer.profileReady, false);
+    assert.equal(snapshot.viewer.nickname, '새로운 이웃');
+    assert.match(snapshot.viewer.draftScope!, /^[a-f0-9]{64}$/u);
+    const request = snapshot.requests.find((row) => row.id === f.requestId)!;
+    assert.equal(request.isMine, false);
+    assert.equal(request.isInterested, false);
+    assert.equal(request.isConfirmed, false);
+    assert.equal(JSON.stringify(snapshot).includes(newcomer), false);
+  }
+  await assert.rejects(f.service.execute(newcomer, { action: 'interest', requestId: f.requestId, interested: true }), { code: 'PROFILE_REQUIRED' });
+  await f.service.execute(newcomer, { action: 'profile', nickname: '처음온이웃' });
+  await f.service.execute(newcomer, { action: 'interest', requestId: f.requestId, interested: true });
+  const resumed = await f.service.snapshot(newcomer, f.requestId);
+  assert.equal(resumed.viewer.profileReady, true);
+  assert.equal(resumed.viewer.nickname, '처음온이웃');
+  assert.equal(resumed.requests.find((row) => row.id === f.requestId)!.isInterested, true);
+});
+
 test('중복 관심은 한 번만 집계하고 작성자의 최초 관심은 유지한다', async (t) => {
   const f = await fixture(); t.after(() => f.database.close());
   await Promise.all(Array.from({ length: 5 }, () => f.service.execute('friend-private-id', { action: 'interest', requestId: f.requestId, interested: true })));

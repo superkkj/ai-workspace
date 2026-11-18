@@ -37,19 +37,39 @@ const proposalPlace = '브라우저 검증 공간';
 let browser;
 let passed = 0;
 let stage = 'preparing local fixtures';
+const diagnostics = [];
+const pendingDiagnostics = new Set();
+let contextNumber = 0;
 const pass = name => { passed++; console.log(`PASS browser: ${name}`); };
 const dialog = page => page.getByRole('dialog');
+const safeDiagnostic = value => {
+  let text = String(value);
+  for (const actor of actors) text = text.replaceAll(actor, '[synthetic-user]');
+  return text.replace(/[^\s@]+@[^\s@]+/g, '[email]')
+    .replace(/https?:\/\/[^\s)]+/g, value => { try { return new URL(value).pathname; } catch { return '[url]'; } })
+    .replace(/resumeKey=[^&\s]+/g, 'resumeKey=[redacted]')
+    .replace(/[a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12}/gi, '[uuid]').slice(0, 500);
+};
+function recordDiagnostic(event) {
+  diagnostics.push(event);
+  if (diagnostics.length > 40) diagnostics.shift();
+}
 
-async function api(actor, command) {
-  const response = await fetch(new URL('/api/platform', base), {
+async function api(actor, command, focusedRequestId) {
+  const endpoint = new URL('/api/platform', base);
+  if (focusedRequestId) endpoint.searchParams.set('request', focusedRequestId);
+  const response = await fetch(endpoint, {
     method: command ? 'POST' : 'GET',
     headers: { ...headersFor(actor), ...(command ? { 'Content-Type': 'application/json', Origin: base.origin } : {}) },
     body: command ? JSON.stringify(command) : undefined,
     redirect: 'error',
     signal: AbortSignal.timeout(20_000),
   });
-  const data = await response.json();
-  assert.equal(response.status, 200, data.error ?? data.code ?? 'Local fixture API failed.');
+  const raw = await response.text();
+  let data;
+  try { data = JSON.parse(raw); }
+  catch { throw new Error(`Local fixture ${command?.action ?? 'GET snapshot'} returned HTTP ${response.status} with non-JSON data.`); }
+  assert.equal(response.status, 200, `Local fixture ${command?.action ?? 'GET snapshot'} (focused=${Boolean(focusedRequestId)}) returned HTTP ${response.status}, code=${/^[A-Z_]{1,60}$/.test(data.code) ? data.code : 'unknown'}.`);
   return data;
 }
 async function requestState(actor, id) {
@@ -84,6 +104,25 @@ async function pageFor(actor = null) {
     ? route.continue() : route.abort('blockedbyclient'));
   const page = await context.newPage();
   page.setDefaultTimeout(12_000);
+  const name = `context-${++contextNumber}`;
+  page.on('pageerror', error => recordDiagnostic({ context: name, event: 'pageerror', name: safeDiagnostic(error.name), message: safeDiagnostic(error.message) }));
+  page.on('requestfailed', request => {
+    if (new URL(request.url()).pathname === '/api/platform') recordDiagnostic({ context: name, event: 'requestfailed', method: request.method(), path: '/api/platform', error: safeDiagnostic(request.failure()?.errorText ?? 'unknown') });
+  });
+  page.on('response', response => {
+    const url = new URL(response.url());
+    if (url.pathname !== '/api/platform') return;
+    const event = { context: name, event: 'response', method: response.request().method(), path: '/api/platform', focused: url.searchParams.has('request'), status: response.status() };
+    const inspect = response.json().then(data => {
+      if (response.status() >= 400) event.code = /^[A-Z_]{1,60}$/.test(data?.code) ? data.code : 'unknown';
+      else if (response.request().method() === 'GET') {
+        event.signedIn = typeof data?.viewer?.signedIn === 'boolean' ? data.viewer.signedIn : null;
+        event.profileReady = typeof data?.viewer?.profileReady === 'boolean' ? data.viewer.profileReady : null;
+        event.requestCount = Array.isArray(data?.requests) ? data.requests.length : null;
+      }
+    }).catch(() => { event.code = 'UNREADABLE_RESPONSE'; }).finally(() => { recordDiagnostic(event); pendingDiagnostics.delete(inspect); });
+    pendingDiagnostics.add(inspect);
+  });
   return { context, page };
 }
 async function showRequest(page, id) {
@@ -110,6 +149,19 @@ try {
     },
   });
   assert.ok(requestId);
+  stage = 'authenticated snapshot preflight with and without a shared-link ID';
+  for (const [label, actor, focused, profileReady] of [
+    ['existing profile with shared link', owner, requestId, true],
+    ['new identity without profile', newcomer, undefined, false],
+    ['new identity with shared link', newcomer, requestId, false],
+  ]) {
+    stage = `snapshot preflight: ${label}`;
+    const snapshot = await api(actor, undefined, focused);
+    assert.equal(snapshot.viewer.signedIn, true, label);
+    assert.equal(snapshot.viewer.profileReady, profileReady, label);
+    assert.ok(snapshot.requests.some(request => request.id === requestId), label);
+    console.log(`PASS browser preflight: ${label}`);
+  }
   browser = await chromium.launch({ headless: true });
 
   stage = 'shared-link login return and first profile continuation';
@@ -353,6 +405,12 @@ try {
   console.log(`Browser smoke checks: ${passed} passed against the built loopback app and local D1.`);
 } catch (error) {
   console.error(`Browser regression failed during: ${stage}`);
+  await Promise.race([Promise.allSettled([...pendingDiagnostics]), delay(1000)]);
+  console.error('Recent browser diagnostics (no headers, query values, identity or storage):', JSON.stringify(diagnostics));
+  if (error instanceof Error) {
+    error.message = safeDiagnostic(error.message);
+    if (error.stack) error.stack = error.stack.split('\n').slice(0, 14).map(safeDiagnostic).join('\n');
+  }
   throw error;
 } finally {
   await browser?.close();
