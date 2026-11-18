@@ -43,3 +43,30 @@ jobs:
         run: npm test
       - name: Build
         run: npm run build
+      - name: Prepare local D1 for HTTP checks
+        run: node --import ./scripts/sites-env.mjs ./node_modules/wrangler/bin/wrangler.js d1 execute DB --local --config dist/server/wrangler.json --persist-to .wrangler/state --file drizzle/0000_famous_toro.sql
+      - name: Check HTTP API with local D1
+        shell: bash
+        run: |
+          npm run start -- --port 4173 > "$RUNNER_TEMP/yeoreojwo-http-server.log" 2>&1 &
+          ci_server_pid=$!
+          trap 'kill "$ci_server_pid" 2>/dev/null || true' EXIT
+          node --input-type=module <<'NODE'
+          import { setTimeout } from 'node:timers/promises';
+          let ready = false;
+          for (let attempt = 0; attempt < 40; attempt++) {
+            try {
+              const response = await fetch('http://127.0.0.1:4173/api/platform', { signal: AbortSignal.timeout(2000) });
+              if (response.ok) { ready = true; break; }
+            } catch {}
+            await setTimeout(500);
+          }
+          if (!ready) throw new Error('Local HTTP API did not become ready.');
+          NODE
+          npm run test:http -- http://127.0.0.1:4173
+      - name: Show local server diagnostics on failure
+        if: failure()
+        run: |
+          if [ -f "$RUNNER_TEMP/yeoreojwo-http-server.log" ]; then
+            tail -n 80 "$RUNNER_TEMP/yeoreojwo-http-server.log"
+          fi
