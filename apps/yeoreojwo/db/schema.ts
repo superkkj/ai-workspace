@@ -10,6 +10,7 @@ export const profiles = sqliteTable('profiles', {
 export const requests = sqliteTable('requests', {
   id: text('id').primaryKey(),
   ownerId: text('owner_id').notNull().references(() => profiles.userId),
+  operationId: text('operation_id'),
   title: text('title').notNull(),
   description: text('description').notNull(),
   category: text('category').notNull(),
@@ -26,6 +27,7 @@ export const requests = sqliteTable('requests', {
 }, (table) => [
   index('requests_created_idx').on(table.createdAt),
   index('requests_owner_idx').on(table.ownerId),
+  uniqueIndex('requests_owner_operation_unique').on(table.ownerId, table.operationId),
   check('requests_budget_nonnegative', sql`${table.budget} >= 0`),
   check('requests_target_range', sql`${table.targetPeople} BETWEEN 2 AND 30`),
   check('requests_status_allowed', sql`${table.status} IN ('open', 'confirming', 'completed', 'cancelled')`),

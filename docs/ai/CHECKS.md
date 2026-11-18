@@ -1,6 +1,17 @@
 # 검사 명령과 결과
 
-## 현재 상태
+## 다인 사용 개선 — 검증 진행 중 (2026-11-18)
+
+기준 main `a605ecb62456752681329e15844f00b8b982c9c8`에서 A/B/C 세 개선을 진행했다. 기준 상태와 범위는 [개선 문서](../product/yeoreojwo-improvements-20261118.md)를 참조한다.
+
+- 로컬 Node.js 24: `npm test` **52/52 성공**. 입력/권한/SQL 기존 규칙 외에 같은 생성 작업 재전송, 새 키, 사용자별 scope, 초안 직렬화, 느린 응답·중복 GET·타임아웃, 안전한 인증 복귀 검사 포함.
+- 타입 검사 첫 실행은 ResumeIntent의 합친 discriminant 정의 때문에 실패했다. 각 kind를 분리한 union으로 수정한 뒤 `npm run typecheck` 성공.
+- Sites build helper로 production 빌드 성공. 이후 독립 코드 검토의 모달 복귀·안내 위치 수정은 최종 빌드와 CI에서 다시 확인할 예정이다.
+- 로컬 DB schema 조회를 빌드와 겹쳐 실행한 첫 시도는 생성 config가 지워지는 동안 ENOENT로 실패했다. 빌드 종료 후 순서대로 다시 실행해 기존 requests schema를 확인하고 새 migration만 적용한다.
+- GitHub의 실제 HTTP·브라우저 검사 및 최신 배포: 아직 결과 확인 전. 실행하지 않은 성공을 기록하지 않는다.
+- 실제 호스팅의 로그인 제공자·다계정 검사와 사용자 PC 실행은 미실행. CI 합성 사용자와 구분한다.
+
+## 이전 첫 버전 완료 기록
 
 열어줘 첫 버전의 소스·마이그레이션·검사 설정은 `apps/yeoreojwo/`에 있습니다. 실행 스크립트는 앱의 `package.json`, 로컬 준비 방법은 앱의 `README.md`를 기준으로 확인했습니다.
 

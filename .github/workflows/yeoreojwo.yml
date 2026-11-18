@@ -25,6 +25,7 @@ jobs:
     timeout-minutes: 15
     env:
       YEOREOJWO_WRANGLER_CLI: ${{ github.workspace }}/.github/tools/yeoreojwo-http-runtime/node_modules/wrangler/bin/wrangler.js
+      YEOREOJWO_PLAYWRIGHT_MODULE: ${{ github.workspace }}/.github/tools/yeoreojwo-http-runtime/node_modules/playwright/index.mjs
     defaults:
       run:
         working-directory: apps/yeoreojwo
@@ -43,9 +44,12 @@ jobs:
             .github/tools/yeoreojwo-http-runtime/package-lock.json
       - name: Install locked dependencies
         run: npm ci --no-audit --no-fund
-      - name: Install isolated HTTP test runtime
+      - name: Install isolated HTTP and browser test runtime
         working-directory: .github/tools/yeoreojwo-http-runtime
         run: npm ci --no-audit --no-fund
+      - name: Install CI Chromium and system dependencies
+        working-directory: .github/tools/yeoreojwo-http-runtime
+        run: node ./node_modules/playwright/cli.js install --with-deps --only-shell chromium
       - name: Check types
         run: npm run typecheck
       - name: Check behavior and database rules
@@ -55,8 +59,11 @@ jobs:
       - name: Adapt generated config for local HTTP runtime
         run: node "$GITHUB_WORKSPACE/.github/tools/yeoreojwo-http-runtime/prepare-config.mjs" dist/server/wrangler.json
       - name: Prepare local D1 for HTTP checks
-        run: node --import ./scripts/sites-env.mjs "$YEOREOJWO_WRANGLER_CLI" d1 execute DB --local --config dist/server/wrangler.json --persist-to .wrangler/state --file drizzle/0000_famous_toro.sql
-      - name: Check HTTP API with local D1
+        run: |
+          for migration in drizzle/*.sql; do
+            node --import ./scripts/sites-env.mjs "$YEOREOJWO_WRANGLER_CLI" d1 execute DB --local --config dist/server/wrangler.json --persist-to .wrangler/state --file "$migration"
+          done
+      - name: Check HTTP API and browser flows with local D1
         shell: bash
         run: |
           # Use the pinned runtime containing the unread-body connection fix.
@@ -122,6 +129,7 @@ jobs:
           console.log('PASS early-rejection connection regression: 20 consecutive rejection/follow-up pairs');
           NODE
           npm run test:http -- http://127.0.0.1:4173
+          node scripts/smoke-browser.mjs http://127.0.0.1:4173
       - name: Show local server diagnostics on failure
         if: failure()
         run: |

@@ -1,12 +1,19 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync, rmSync } from 'node:fs';
+import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { PlatformService } from '../lib/platform-service.ts';
 import { SqliteD1 } from './sqlite-d1.ts';
 
 const START = Date.parse('2026-11-18T03:00:00Z');
+const operationId = '8f2b5bd9-a17c-4c4e-af63-29c523b1a639';
+const anotherOperationId = 'a5465968-0c9f-4579-85f2-925a9ea1c301';
+const requestInput = () => ({
+  title: '저장 결과를 확인할 도자기 모임', description: '응답을 받지 못해 다시 저장해도 한 번만 생성되는 요청입니다.',
+  category: 'craft', region: '서울 마포구', preferredTime: '주말 오후', budget: 35000, targetPeople: 4,
+  deadline: new Date(START + 5 * 86400000).toISOString(),
+});
 
 async function fixture(path = ':memory:') {
   const database = new SqliteD1(path);
@@ -43,6 +50,93 @@ test('실제 SQL 저장·재조회와 공개 DTO 개인정보 경계', async (t)
   assert.equal(anonymous.viewer.signedIn, false);
   assert.equal(anonymous.requests[0].isMine, false);
   assert.equal(anonymous.requests[0].isInterested, false);
+  assert.equal(anonymous.viewer.draftScope, null);
+});
+
+test('초안 저장 범위는 계정별로 고정되며 공개 기록에 사용자 ID나 키를 노출하지 않는다', async (t) => {
+  const f = await fixture(); t.after(() => f.database.close());
+  const first = await f.service.snapshot('owner-private-id');
+  const again = await f.service.snapshot('owner-private-id');
+  const other = await f.service.snapshot('friend-private-id');
+  assert.match(first.viewer.draftScope!, /^[0-9a-f]{64}$/u);
+  assert.equal(first.viewer.draftScope, again.viewer.draftScope);
+  assert.notEqual(first.viewer.draftScope, other.viewer.draftScope);
+  assert.equal(JSON.stringify(first.requests).includes(first.viewer.draftScope!), false);
+  assert.equal(JSON.stringify(first).includes('owner-private-id'), false);
+});
+
+test('생성 응답이 유실된 뒤 재전송해도 요청과 작성자의 관심은 한 번만 저장한다', async (t) => {
+  const f = await fixture(); t.after(() => f.database.close());
+  const command = { action: 'createRequest', operationId, input: requestInput() };
+  await assert.rejects(async () => {
+    await f.service.execute('owner-private-id', command);
+    // Server committed; the caller did not receive the response.
+    throw new TypeError('simulated response lost after commit');
+  }, /response lost/u);
+  const saved = (await f.service.snapshot('owner-private-id')).requests.find((r) => r.title === command.input.title)!;
+  const recovered = await f.service.execute('owner-private-id', command);
+  assert.equal(recovered.requestId, saved.id);
+  const current = await f.service.snapshot('owner-private-id');
+  assert.equal(current.requests.length, 2);
+  assert.equal(current.requests.find((r) => r.id === saved.id)!.interestCount, 1);
+  assert.equal(JSON.stringify(current).includes(operationId), false);
+});
+
+test('동시에 같은 생성 키가 도착해도 고유 제약과 원자적 배치가 한 요청만 만든다', async (t) => {
+  const f = await fixture(); t.after(() => f.database.close());
+  const results = await Promise.all(Array.from({ length: 8 }, () => f.service.execute('owner-private-id', {
+    action: 'createRequest', operationId, input: requestInput(),
+  })));
+  assert.equal(new Set(results.map((r) => r.requestId)).size, 1);
+  const current = await f.service.snapshot('owner-private-id');
+  assert.equal(current.requests.length, 2);
+  assert.equal(current.requests.find((r) => r.id === results[0].requestId)!.interestCount, 1);
+});
+
+test('같은 키에 다른 내용은 충돌로 알리고 명시적으로 새 키를 쓰면 별도 요청을 만든다', async (t) => {
+  const f = await fixture(); t.after(() => f.database.close());
+  const first = await f.service.execute('owner-private-id', { action: 'createRequest', operationId, input: requestInput() });
+  await assert.rejects(f.service.execute('owner-private-id', { action: 'createRequest', operationId, input: { ...requestInput(), budget: 20000 } }), { code: 'OPERATION_CONFLICT', status: 409 });
+  const next = await f.service.execute('owner-private-id', { action: 'createRequest', operationId: anotherOperationId, input: requestInput() });
+  assert.notEqual(first.requestId, next.requestId);
+  assert.equal((await f.service.snapshot('owner-private-id')).requests.length, 3);
+  assert.equal((await f.service.snapshot('owner-private-id')).requests.find((r) => r.id === first.requestId)!.budget, 35000);
+});
+
+test('생성 키는 사용자별로 분리하고 마감·취소 뒤 재전송은 원래 결과만 반환한다', async (t) => {
+  const f = await fixture(); t.after(() => f.database.close());
+  const command = { action: 'createRequest', operationId, input: requestInput() };
+  const own = await f.service.execute('owner-private-id', command);
+  const other = await f.service.execute('friend-private-id', command);
+  assert.notEqual(own.requestId, other.requestId);
+  await f.service.execute('owner-private-id', { action: 'cancel', requestId: own.requestId, reason: '일정이 바뀌어 취소해요.' });
+  f.setTime(START + 6 * 86400000);
+  assert.deepEqual(await f.service.execute('owner-private-id', command), own);
+  assert.deepEqual(await f.service.execute('friend-private-id', command), other);
+  const records = (await f.service.snapshot('owner-private-id')).requests;
+  assert.equal(records.find((r) => r.id === own.requestId)!.status, 'cancelled');
+  assert.equal(records.find((r) => r.id === other.requestId)!.status, 'expired');
+  assert.equal(records.find((r) => r.id === other.requestId)!.isMine, false);
+  await assert.rejects(f.service.execute('owner-private-id', { ...command, operationId: anotherOperationId }), { code: 'INVALID_DATE' });
+});
+
+test('생성 키 마이그레이션은 기존 요청과 상태를 보존한다', async (t) => {
+  const database = new SqliteD1(); t.after(() => database.close());
+  database.sqlite.exec(readFileSync(new URL('../drizzle/0000_famous_toro.sql', import.meta.url), 'utf8'));
+  database.sqlite.exec(`INSERT INTO profiles VALUES ('legacy-owner', '기존이웃', ${START});
+    INSERT INTO requests (id, owner_id, title, description, category, region, preferred_time, budget, target_people, deadline, status, created_at, updated_at)
+    VALUES ('legacy-request', 'legacy-owner', '기존 도자기 요청', '이전 버전에서 저장한 요청입니다.', 'craft', '서울 마포구', '주말', 30000, 4, ${START + 86400000}, 'open', ${START}, ${START});
+    INSERT INTO interests VALUES ('legacy-request', 'legacy-owner', ${START});`);
+  database.sqlite.exec(readFileSync(new URL('../drizzle/0001_request_operation.sql', import.meta.url), 'utf8'));
+  const service = new PlatformService(database.asD1(), { now: () => START });
+  const legacy = (await service.snapshot('legacy-owner')).requests[0];
+  assert.equal(legacy.id, 'legacy-request');
+  assert.equal(legacy.title, '기존 도자기 요청');
+  assert.equal(legacy.interestCount, 1);
+  assert.equal(legacy.status, 'open');
+  const created = await service.execute('legacy-owner', { action: 'createRequest', operationId, input: requestInput() });
+  assert.ok(created.requestId);
+  assert.equal((await service.snapshot('legacy-owner')).requests.length, 2);
 });
 
 test('비로그인과 공개 닉네임 미설정 사용자의 쓰기를 거절한다', async (t) => {

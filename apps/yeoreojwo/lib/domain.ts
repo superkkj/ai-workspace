@@ -111,11 +111,22 @@ export function validateProposal(value: unknown, now: number): ProposalInput {
   };
 }
 
+export function validateRequestOperationId(value: unknown): string | undefined {
+  if (value === undefined) return undefined;
+  if (typeof value !== 'string' || !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/iu.test(value)) {
+    throw new DomainError('INVALID_OPERATION_ID', '작성 중인 요청을 다시 열어 저장해 주세요.');
+  }
+  return value.toLowerCase();
+}
+
 export function validateCommand(value: unknown, now: number): PlatformCommand {
   const command = object(value);
   const action = command.action;
   if (action === 'profile') return { action, nickname: validateNickname(command.nickname) };
-  if (action === 'createRequest') return { action, input: validateRequest(command.input, now) };
+  if (action === 'createRequest') {
+    const operationId = validateRequestOperationId(command.operationId);
+    return { action, ...(operationId ? { operationId } : {}), input: validateRequest(command.input, now) };
+  }
   const requestId = text(command.requestId, '요청 ID', 1, 100);
   if (action === 'interest') {
     if (typeof command.interested !== 'boolean') throw new DomainError('INVALID_INPUT', '관심 참여 상태를 확인해 주세요.');

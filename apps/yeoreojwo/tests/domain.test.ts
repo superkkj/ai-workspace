@@ -58,6 +58,17 @@ test('알 수 없는 작업·타입을 거절하고 클라이언트가 보낸 �
   assert.equal(JSON.stringify(parsed).includes('someone-else'), false);
 });
 
+test('요청 생성 키는 UUID만 허용하며 기존 키 없는 호출은 유지한다', () => {
+  const operationId = '8F2B5BD9-A17C-4C4E-AF63-29C523B1A639';
+  const parsed = validateCommand({ action: 'createRequest', operationId, input: request() }, NOW);
+  assert.equal(parsed.action === 'createRequest' && parsed.operationId, operationId.toLowerCase());
+  const legacy = validateCommand({ action: 'createRequest', input: request() }, NOW);
+  assert.equal('operationId' in legacy, false);
+  for (const key of ['', 'not-a-uuid', null, 12, 'x'.repeat(1000), '00000000-0000-0000-0000-000000000000']) {
+    assert.throws(() => validateCommand({ action: 'createRequest', operationId: key, input: request() }, NOW), { code: 'INVALID_OPERATION_ID' });
+  }
+});
+
 test('쓰기 API는 같은 출처 JSON만 받는다', async () => {
   const sameOrigin = new Request('https://example.com/api/platform', { method: 'POST', headers: { origin: 'https://example.com', 'content-type': 'application/json' }, body: '{"action":"profile","nickname":"이웃"}' });
   assert.deepEqual(await readMutationBody(sameOrigin), { action: 'profile', nickname: '이웃' });

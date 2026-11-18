@@ -14,6 +14,8 @@ export type Viewer = {
   signedIn: boolean;
   nickname: string;
   profileReady: boolean;
+  /** Opaque per-account label for local drafts; never an authentication token. */
+  draftScope: string | null;
 };
 
 export type RequestInput = {
@@ -74,7 +76,7 @@ export type PlatformSnapshot = {
 
 export type PlatformCommand =
   | { action: 'profile'; nickname: string }
-  | { action: 'createRequest'; input: RequestInput }
+  | { action: 'createRequest'; operationId?: string; input: RequestInput }
   | { action: 'interest'; requestId: string; interested: boolean }
   | { action: 'createProposal'; requestId: string; input: ProposalInput }
   | { action: 'chooseProposal'; requestId: string; proposalId: string }

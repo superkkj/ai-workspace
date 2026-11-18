@@ -1,5 +1,5 @@
-import type { Category, CommandResult, PlatformSnapshot, ProposalView, RequestView } from './contracts.ts';
-import { DomainError, effectiveStatus, validateCommand } from './domain.ts';
+import type { Category, CommandResult, PlatformSnapshot, ProposalView, RequestInput, RequestView } from './contracts.ts';
+import { DomainError, effectiveStatus, validateCommand, validateRequestOperationId } from './domain.ts';
 
 export type PlatformDatabase = Pick<D1Database, 'prepare' | 'batch'>;
 
@@ -7,7 +7,7 @@ type RequestRow = {
   id: string; owner_id: string; title: string; description: string; category: Category;
   region: string; preferred_time: string; budget: number; target_people: number;
   deadline: number; status: string; selected_proposal_id: string | null;
-  cancellation_reason: string | null; created_at: number; updated_at: number;
+  cancellation_reason: string | null; created_at: number; updated_at: number; operation_id: string | null;
 };
 
 type ProposalRow = {
@@ -19,6 +19,26 @@ type ProposalRow = {
 type RequestListing = RequestRow & { nickname: string; interest_count: number; confirmed_count: number; my_interest: number; my_registration: number };
 type ProposalListing = ProposalRow & { nickname: string; confirmed_count: number };
 const iso = (value: number) => new Date(value).toISOString();
+
+async function draftScope(userId: string | null): Promise<string | null> {
+  if (!userId) return null;
+  const bytes = new TextEncoder().encode(`yeoreojwo:drafts:v1:${userId}`);
+  const digest = await crypto.subtle.digest('SHA-256', bytes);
+  return Array.from(new Uint8Array(digest), (byte) => byte.toString(16).padStart(2, '0')).join('');
+}
+
+function sameRequestInput(row: RequestRow, input: RequestInput): boolean {
+  return row.title === input.title && row.description === input.description && row.category === input.category
+    && row.region === input.region && row.preferred_time === input.preferredTime && row.budget === input.budget
+    && row.target_people === input.targetPeople && row.deadline === Date.parse(input.deadline);
+}
+
+function creationResult(row: RequestRow, input: RequestInput): CommandResult {
+  if (!sameRequestInput(row, input)) {
+    throw new DomainError('OPERATION_CONFLICT', '앞선 저장과 내용이 달라요. 내 활동에서 저장 결과를 확인한 뒤 새 요청으로 작성해 주세요.', 409);
+  }
+  return { ok: true, requestId: row.id };
+}
 
 export function validateFocusedRequestId(value: string | null): string | null {
   if (value === null) return null;
@@ -147,7 +167,7 @@ export class PlatformService {
       })),
     }));
     return {
-      viewer: { signedIn: Boolean(userId), nickname: profile?.nickname ?? '새로운 이웃', profileReady: Boolean(profile) },
+      viewer: { signedIn: Boolean(userId), nickname: profile?.nickname ?? '새로운 이웃', profileReady: Boolean(profile), draftScope: await draftScope(userId) },
       requests,
       serverTime: iso(now),
     };
@@ -156,6 +176,19 @@ export class PlatformService {
   async execute(userId: string | null, value: unknown): Promise<CommandResult> {
     if (!userId) throw new DomainError('SIGN_IN_REQUIRED', '로그인하면 참여할 수 있어요.', 401);
     const now = this.clock();
+    // Look up only this authenticated user's completed creation. Revalidate a
+    // replay at its original creation time so a later deadline does not hide a
+    // successful save whose response was lost. Stored conditions are immutable.
+    if (value && typeof value === 'object' && !Array.isArray(value) && 'action' in value && value.action === 'createRequest') {
+      const operationId = validateRequestOperationId('operationId' in value ? value.operationId : undefined);
+      if (operationId) {
+        const saved = await this.db.prepare('SELECT * FROM requests WHERE owner_id = ? AND operation_id = ?').bind(userId, operationId).first<RequestRow>();
+        if (saved) {
+          const replay = validateCommand(value, saved.created_at);
+          if (replay.action === 'createRequest') return creationResult(saved, replay.input);
+        }
+      }
+    }
     const command = validateCommand(value, now);
     if (command.action === 'profile') {
       await this.db.prepare(`INSERT INTO profiles (user_id, nickname, updated_at) VALUES (?, ?, ?)
@@ -170,11 +203,20 @@ export class PlatformService {
       const input = command.input;
       await this.db.batch([
         this.db.prepare(`INSERT INTO requests
-          (id, owner_id, title, description, category, region, preferred_time, budget, target_people, deadline, status, created_at, updated_at)
-          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'open', ?, ?)`)
-          .bind(id, userId, input.title, input.description, input.category, input.region, input.preferredTime, input.budget, input.targetPeople, Date.parse(input.deadline), now, now),
-        this.db.prepare('INSERT INTO interests (request_id, user_id, created_at) VALUES (?, ?, ?)').bind(id, userId, now),
+          (id, owner_id, operation_id, title, description, category, region, preferred_time, budget, target_people, deadline, status, created_at, updated_at)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'open', ?, ?)
+          ON CONFLICT(owner_id, operation_id) DO NOTHING`)
+          .bind(id, userId, command.operationId ?? null, input.title, input.description, input.category, input.region, input.preferredTime, input.budget, input.targetPeople, Date.parse(input.deadline), now, now),
+        // A losing duplicate inserts no row or interest. The winning request and
+        // its owner's first interest commit together in the same atomic batch.
+        this.db.prepare(`INSERT INTO interests (request_id, user_id, created_at)
+          SELECT id, owner_id, created_at FROM requests WHERE id = ?`).bind(id),
       ]);
+      if (command.operationId) {
+        const saved = await this.db.prepare('SELECT * FROM requests WHERE owner_id = ? AND operation_id = ?').bind(userId, command.operationId).first<RequestRow>();
+        if (!saved) throw new Error('Creation result is not available.');
+        return creationResult(saved, input);
+      }
       return { ok: true, requestId: id };
     }
 

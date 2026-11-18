@@ -55,15 +55,40 @@ try {
   assert.equal((await call(owner, { action: 'profile', nickname: '요청자테스트' }, { Origin: 'https://wrong.example' })).status, 403);
   pass('cross-origin writes rejected');
   for (let i = 0; i < actors.length; i++) await success(actors[i], { action: 'profile', nickname: `동작검증${i + 1}` });
-  const created = await success(owner, { action: 'createRequest', input: {
+  const creation = { action: 'createRequest', operationId: randomUUID(), input: {
     title: '동작 검증용 도자기 모임', description: 'HTTP와 실제 로컬 데이터베이스의 연결을 확인하는 합성 테스트입니다.',
     category: 'craft', region: '테스트 동네', preferredTime: '주말 오후', budget: 45000, targetPeople: 3,
     deadline: new Date(Date.now() + 86_400_000).toISOString(),
-  } });
+  } };
+  // The server commits, but the client cannot read the result body. Deliberately
+  // resubmit the same logical operation; this is a test, never an API auto-retry.
+  const lost = await fetch(new URL('/api/platform', base), {
+    method: 'POST', headers: { 'Content-Type': 'application/json', Origin: base.origin,
+      'oai-authenticated-user-id': owner, 'oai-authenticated-user-email': `${owner}@example.invalid` },
+    body: JSON.stringify(creation), signal: AbortSignal.timeout(20_000),
+  });
+  assert.equal(lost.status, 200);
+  await lost.body.cancel();
+  await assert.rejects(lost.json(), TypeError);
+  const created = await success(owner, creation);
   const requestId = created.requestId;
   assert.ok(requestId); requestIds.push(requestId);
   assert.equal((await state(owner, requestId)).interestCount, 1);
   pass('request persisted with one owner interest');
+  const duplicated = await Promise.all(Array.from({ length: 3 }, () => success(owner, creation)));
+  assert.equal(duplicated.every((result) => result.requestId === requestId), true);
+  const afterReplay = await success(owner);
+  assert.equal(afterReplay.requests.filter((request) => request.isMine).length, 1);
+  assert.equal(JSON.stringify(afterReplay).includes(creation.operationId), false, 'Operation IDs remain private');
+  const conflict = await call(owner, { ...creation, input: { ...creation.input, budget: 12000 } });
+  assert.equal(conflict.status, 409);
+  assert.equal(conflict.data.code, 'OPERATION_CONFLICT');
+  pass('lost response and concurrent creation replays keep exactly one request');
+  const intentional = await success(owner, { ...creation, operationId: randomUUID() });
+  requestIds.push(intentional.requestId);
+  assert.notEqual(intentional.requestId, requestId);
+  assert.equal((await state(owner, requestId)).budget, creation.input.budget);
+  pass('a deliberate new creation key makes a separate request');
   await success(participants[0], { action: 'interest', requestId, interested: true });
   await success(participants[0], { action: 'interest', requestId, interested: true });
   assert.equal((await state(owner, requestId)).interestCount, 2);
@@ -116,10 +141,13 @@ try {
   // Remove only this run's synthetic rows. Existing preview data is preserved.
   const ids = requestIds.map(quote).join(',') || "''";
   const people = actors.map(quote).join(',');
-  const cleanup = `DELETE FROM registrations WHERE request_id IN (${ids});
-    DELETE FROM interests WHERE request_id IN (${ids});
-    DELETE FROM proposals WHERE request_id IN (${ids});
-    DELETE FROM requests WHERE id IN (${ids});
+  // Also select this run's owners so a committed creation with a lost result is
+  // cleaned up even when no response supplied its request ID to the test.
+  const ownedRequests = `SELECT id FROM requests WHERE id IN (${ids}) OR owner_id IN (${people})`;
+  const cleanup = `DELETE FROM registrations WHERE request_id IN (${ownedRequests});
+    DELETE FROM interests WHERE request_id IN (${ownedRequests});
+    DELETE FROM proposals WHERE request_id IN (${ownedRequests});
+    DELETE FROM requests WHERE id IN (${ids}) OR owner_id IN (${people});
     DELETE FROM profiles WHERE user_id IN (${people});`;
   execFileSync(process.execPath, ['--import', './scripts/sites-env.mjs', wranglerCli,
     'd1', 'execute', 'DB', '--local', '--config', 'dist/server/wrangler.json', '--persist-to', '.wrangler/state', '--command', cleanup],
