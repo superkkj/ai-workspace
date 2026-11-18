@@ -68,9 +68,11 @@ AI와 함께 개발하면서 코드, 진행 상황, 확인된 해결 경험을 �
 
 타입 검사, Node·SQLite/D1 어댑터 자동 테스트 **22개**, 로컬 D1 마이그레이션과 최종 앱 소스의 production 빌드를 확인했습니다. 브라우저에서는 검색·필터·빈 결과·예시 상세·로그인 요구·모바일 메뉴와 좁은 화면 배치를 확인했습니다. 실제 모집 데이터는 **0건**이며 화면 이해용 **예시 6건은 읽기 전용**입니다.
 
-**실행 주소:** https://yeoreojwo-superkkj.insightfulinlet4.chatgpt.site — 배포 성공을 확인했으며 현재는 **소유자 전용**입니다. 공개 GitHub와 앱의 방문 가능 범위는 별개입니다.
+**실행 주소:** [열어줘 열기](https://yeoreojwo-superkkj.insightfulinlet4.chatgpt.site) — 배포 성공을 확인했으며 현재는 **소유자 전용**입니다. 공개 GitHub와 앱의 방문 가능 범위는 별개입니다. 브라우저에서는 배포 주소의 로그인 화면까지 확인했습니다.
 
-HTTP 통합 검사 시도는 실행 환경에서 미리보기 서버의 loopback 주소에 연결하지 못해 완료하지 못했습니다. 실제 다계정 브라우저 흐름과 사용자 PC 실행도 미검증입니다. **GitHub 소스 업로드와 CI 결과는 확인 대기 중**이며, 결과는 [현재 상태](STATUS.md)와 [검사 기록](docs/ai/CHECKS.md)에 갱신합니다.
+[첫 버전의 예시 화면](docs/product/yeoreojwo-preview.jpg)은 로컬 미리보기에서 캡처했습니다.
+
+공개 GitHub에 앱 소스와 개발 기록을 반영했고, [최종 GitHub Actions](https://github.com/superkkj/ai-workspace/actions/runs/44258530492)에서 의존성 설치·타입 검사·22개 자동 테스트·빌드·로컬 D1 준비·HTTP 통합 검사 9개가 모두 통과했습니다. HTTP 검사는 GitHub runner 안에서 합성 사용자를 사용했고 생성한 로컬 테스트 기록을 정리했습니다. 실제 ChatGPT 계정 여러 개를 사용한 브라우저 전체 흐름과 사용자 PC 실행은 아직 미검증입니다. 이전 CI의 로컬 프록시 503 실패와 현재 통과의 범위는 [검사 기록](docs/ai/CHECKS.md)에 구분해 남겼습니다.
 
 이전 [실용 앱 후보 조사](docs/research/2026-11-18-app-ideas.md)는 후보 탐색의 기록으로 보존합니다. 선택한 제품의 현재 범위는 [열어줘 기획서](docs/product/yeoreojwo-plan.md)를 기준으로 합니다.
 

@@ -4,9 +4,9 @@
 
 열어줘 첫 버전의 소스·마이그레이션·검사 설정은 `apps/yeoreojwo/`에 있습니다. 실행 스크립트는 앱의 `package.json`, 로컬 준비 방법은 앱의 `README.md`를 기준으로 확인했습니다.
 
-2026-11-18 최종 앱 소스에 대해 타입 검사, 자동 테스트 **22개**, production 빌드 성공을 확인했습니다. 검증 후 저장된 Sites 소스 커밋은 `b03cabcad16b1bfe11ee3d62feac49aefe7ddcc9`입니다. 이 커밋은 Sites 배포용 소스 커밋이며 GitHub `main`의 업로드 완료를 뜻하지 않습니다.
+2026-11-18 최종 앱 소스에 대해 타입 검사, 자동 테스트 **22개**, production 빌드 성공을 확인했습니다. 검증 후 저장된 Sites 소스 커밋은 `b03cabcad16b1bfe11ee3d62feac49aefe7ddcc9`입니다. 이 커밋은 Sites 배포용 소스 커밋입니다. 같은 앱 소스의 GitHub 반영 커밋은 `d752fc73d0dd26ee9a3500dd29b02f416b2aec10`이며 원격 파일 트리와 준비한 파일 트리의 일치를 확인했습니다.
 
-배포는 `succeeded`로 확인됐고 실행 주소는 https://yeoreojwo-superkkj.insightfulinlet4.chatgpt.site 입니다. 접근 범위는 **소유자 전용**입니다. GitHub 소스 업로드·Actions 결과는 아직 확인 대기입니다.
+배포는 `succeeded`로 확인됐고 실행 주소는 https://yeoreojwo-superkkj.insightfulinlet4.chatgpt.site 입니다. 접근 범위는 **소유자 전용**입니다. 첫 [GitHub Actions 실행](https://github.com/superkkj/ai-workspace/actions/runs/44257210935)에서 의존성 설치·타입 검사·22개 자동 테스트·빌드 성공을 확인했습니다. 최종 [GitHub Actions 실행](https://github.com/superkkj/ai-workspace/actions/runs/44258530492)에서는 HTTP 통합 검사 **9/9**까지 포함해 전체 성공을 확인했습니다. 대상 커밋은 `7ce997f2f09cd6ee85242b05f4a6758f88708590`입니다.
 
 ## 프로젝트 검사 목록
 
@@ -17,11 +17,11 @@
 | production 빌드 | `npm run build` 및 Sites build helper | 최종 앱 소스, Sites workflow | 성공 — 배포용 산출물 생성 |
 | 로컬 DB 준비 | Wrangler의 로컬 D1에 `drizzle/0000_famous_toro.sql` 적용 | 로컬 DB; 설정·명령은 앱 README에 기록 | 성공 — 호스팅 DB의 실제 이용자 데이터 검증과는 별개 |
 | 브라우저 탐색 화면 | 검색·분야 필터·빈 결과·초기화·예시 상세·로그인 요구·모바일 메뉴 | managed preview 브라우저 | 성공 — 아래 확인 범위 참조 |
-| HTTP 통합 검사 | `npm run test:http -- <실제 loopback 서버 URL>` | `scripts/smoke-http.mjs`, 실행 환경에서 managed preview로 연결 시도 | 실패 — `ECONNREFUSED`. 앱 흐름 assertions는 미검증 |
+| HTTP 통합 검사 | `npm run test:http -- http://127.0.0.1:4173` | GitHub Actions의 로컬 Wrangler·D1, 합성 사용자 | 성공 — 9/9. 실제 호스팅 인증·원격 D1 부하 시험과는 별개 |
 | 실제 다계정 전체 흐름 | 서로 다른 로그인 계정으로 요청→제안→선택→확정 | 실제 호스팅·브라우저 | 미실행 — 합성 사용자의 SQL 테스트와 구분 |
 | 사용자 PC 실행 | 앱 README의 설치·마이그레이션·실행 순서 | 사용자 PC | 미실행 |
 | Sites 배포 | 배포 도구의 최종 상태와 URL 확인 | 소유자 전용 사이트 | 성공 — `succeeded` |
-| GitHub 반영·CI | 원격 커밋과 `.github/workflows/yeoreojwo.yml` 실행 확인 | GitHub Actions | 대기 — 설정 존재만으로 성공 처리하지 않음 |
+| GitHub 반영·CI | 원격 커밋·트리 대조와 `.github/workflows/yeoreojwo.yml` 실행 확인 | GitHub Actions, run `44258530492` | 성공 — 의존성 설치·타입 검사·22개 테스트·빌드·로컬 D1·HTTP 9개 |
 | 변이 테스트·self-hosted runner | 이번 범위에서 도입하지 않음 | 해당 없음 | 미실행 — 완료 기준의 필수 검사로 정하지 않음 |
 
 ## 열어줘 구현·검사 기록 — 2026-11-18
@@ -39,14 +39,20 @@
 - 검색, 카테고리 선택, 검색 결과 없음, 필터 초기화, 예시 상세 진입, 로그인 필요 안내와 모바일 메뉴를 확인했습니다.
 - 실제 모집 데이터가 0건인 상태에서 화면 이해용 예시 6건이 읽기 전용으로 표시되는 것을 확인했습니다. 이를 실제 모집 성과나 활성 사용자 수로 기록하지 않습니다.
 - 390px iframe 안의 실제 콘텐츠 폭 375px에서 모바일 배치를 확인했습니다. hero의 grid 열을 `minmax(0, 1fr)`로 조정한 뒤, 좌우 여백을 제외한 내용 폭 335px에 정상 배치되는 것을 재확인했습니다.
+- [로컬 미리보기 전체 화면](../product/yeoreojwo-preview.jpg)을 기록했습니다. 선택된 제안 상세에서 가격·일정·정원·가상 참가 확정 인원과 예시 고지를 확인했습니다.
+- 배포된 주소는 로그인 화면까지 확인했습니다. 브라우저에 로그인 세션이 없어 실제 로그인 후 작성·제안·참가 동작을 확인하지 않았습니다.
 - 브라우저 검증 범위는 위 탐색·예시·로그인 요구·배치 동작입니다. 실제 다계정의 작성·제안·확정 전체 흐름 통과를 주장하지 않습니다.
 
-### HTTP smoke 시도와 남은 확인
+### HTTP smoke 시도, 최종 통과와 남은 확인
 
-- 실행 환경에서 managed preview의 loopback 주소로 HTTP smoke 스크립트를 연결할 때 `ECONNREFUSED`가 발생했습니다.
-- 연결 단계 실패로 앱 API·D1 흐름의 assertions는 검증되지 않았습니다. 스크립트가 존재하거나 실행을 시도한 사실을 통과로 세지 않습니다.
-- loopback으로 접근 가능한 로컬 서버 환경에서 다시 실행해야 하며, 호스팅 실제 인증 검증은 별도로 필요합니다.
-- 사용자 PC 실행과 실제 여러 계정의 이용은 미검증입니다. GitHub 커밋·CI 결과는 원격 응답 확인 후 갱신합니다.
+1. 관리형 미리보기와 실행 환경 사이의 loopback 연결은 `ECONNREFUSED`로 실패했다. 이 시도는 통과가 아니다.
+2. GitHub runner 안에 실제 로컬 Wrangler 서버와 D1을 준비한 첫 실행 [44257478542](https://github.com/superkkj/ai-workspace/actions/runs/44257478542)은 401·403 거절 검사 2개 뒤 첫 닉네임 저장 요청에서 평문 503이 나와 실패했다. 정상 GET을 연속 10회 확인한 다음 실행 [44257980723](https://github.com/superkkj/ai-workspace/actions/runs/44257980723)도 같은 위치에서 실패했다.
+3. [최종 실행 44258530492](https://github.com/superkkj/ai-workspace/actions/runs/44258530492)은 앱 소스를 바꾸지 않고, 본문 진단 요청 2개와 debug 로깅을 추가한 조건에서 **HTTP 9/9**가 모두 통과했다. 잘못된 JSON은 `400 INVALID_JSON`, 알 수 없는 작업은 `400 INVALID_ACTION`으로 관찰됐다. 각 작업을 자동 재시도해서 통과시키지 않았다.
+4. 성공한 HTTP 검사는 비로그인·다른 출처 쓰기 거절, 요청 영속 저장, 관심 중복 방지, 제안 권한과 명시적 확정, 동시 신청 정원 제한, 중복 확정·취소 자리 복구, 완료 시점·취소 권한·종료 상태, 공개 응답의 개인정보 경계를 확인했다. 합성 사용자와 이번 실행의 로컬 데이터만 정리했고 정리 성공을 확인했다.
+
+이전 503의 문구는 Worker 재시작을 주장했지만, 설치된 Wrangler 4.92의 ProxyWorker는 경로를 포함한 URL과 기본 URL의 `href` 비교로 다른 전송 오류도 재시작으로 분류할 수 있다. [상류 원문 이슈](https://github.com/cloudflare/workers-sdk/issues/14641)도 이 오분류를 다룬다. **이번 두 실패의 실제 원인은 아직 확정하지 못했다.** 정상 본문 읽기·프로필 저장이 최종 실행에서 통과한 사실과, 이전 실패 원인을 수정했다는 주장은 구분한다. 재발하면 서버·프록시 로그를 보존해 진단한다.
+
+실제 여러 ChatGPT 계정을 사용한 호스팅 브라우저 전체 흐름과 사용자 PC 실행은 여전히 미검증이다. 로컬 D1과 합성 사용자 HTTP 검사가 이를 대신하지 않는다.
 
 ## 확인된 저장소 점검
 
