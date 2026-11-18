@@ -48,6 +48,8 @@ node --import ./scripts/sites-env.mjs ./node_modules/wrangler/bin/wrangler.js d1
 
 로컬 D1 마이그레이션과 미리보기 서버를 먼저 준비한 뒤 `npm run test:http -- http://127.0.0.1:4173`을 실행합니다. 포트는 실제 로컬 서버 포트로 맞춥니다. 이 스크립트는 HTTP loopback 주소만 허용하고 합성 사용자로 실제 API·D1 흐름을 확인한 뒤 자신이 만든 데이터만 정리합니다. 호스팅 환경의 인증 계정 검증과는 별도입니다.
 
+GitHub CI는 구버전 로컬 프록시의 연결 문제를 피하기 위해 [독립 HTTP 검사 런타임](https://github.com/superkkj/ai-workspace/tree/main/.github/tools/yeoreojwo-http-runtime)을 사용합니다. 같은 검사를 재현할 때는 해당 안내와 workflow를 따르고, `YEOREOJWO_WRANGLER_CLI`를 설정해 DB 준비·서버·테스트 정리가 같은 CLI와 상태 저장 경로를 사용하도록 합니다. 앱 빌드용 의존성과 호스팅 인증은 바꾸지 않습니다.
+
 ## 주요 파일
 
 - `app/components/`: 탐색·상세·입력·확정 화면.

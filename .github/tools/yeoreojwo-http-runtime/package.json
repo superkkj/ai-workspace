@@ -1,0 +1,12 @@
+{
+  "name": "yeoreojwo-http-test-runtime",
+  "private": true,
+  "version": "1.0.0",
+  "description": "Pinned local HTTP test runtime, isolated from the application's Vite integration.",
+  "engines": {
+    "node": ">=24.0.0"
+  },
+  "devDependencies": {
+    "wrangler": "4.151.2"
+  }
+}

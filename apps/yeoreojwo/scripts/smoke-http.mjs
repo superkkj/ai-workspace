@@ -7,6 +7,8 @@ const base = new URL(process.argv[2] ?? 'http://127.0.0.1:4173');
 if (base.protocol !== 'http:' || !['127.0.0.1', 'localhost', '[::1]'].includes(base.hostname) || base.username || base.password) {
   throw new Error('This test only accepts an HTTP loopback preview URL.');
 }
+// CI uses an isolated patched runtime for both the server and local D1 cleanup.
+const wranglerCli = process.env.YEOREOJWO_WRANGLER_CLI ?? './node_modules/wrangler/bin/wrangler.js';
 const suffix = randomUUID();
 const actors = ['owner', 'provider', 'one', 'two', 'three'].map((role) => `smoke-${role}-${suffix}`);
 const [owner, provider, ...participants] = actors;
@@ -119,7 +121,7 @@ try {
     DELETE FROM proposals WHERE request_id IN (${ids});
     DELETE FROM requests WHERE id IN (${ids});
     DELETE FROM profiles WHERE user_id IN (${people});`;
-  execFileSync(process.execPath, ['--import', './scripts/sites-env.mjs', './node_modules/wrangler/bin/wrangler.js',
+  execFileSync(process.execPath, ['--import', './scripts/sites-env.mjs', wranglerCli,
     'd1', 'execute', 'DB', '--local', '--config', 'dist/server/wrangler.json', '--persist-to', '.wrangler/state', '--command', cleanup],
     { cwd: process.cwd(), stdio: 'pipe', timeout: 30_000 });
   console.log('Removed this run’s synthetic local records.');

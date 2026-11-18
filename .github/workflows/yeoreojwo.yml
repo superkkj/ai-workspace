@@ -5,10 +5,12 @@ on:
     paths:
       - 'apps/yeoreojwo/**'
       - '.github/workflows/yeoreojwo.yml'
+      - '.github/tools/yeoreojwo-http-runtime/**'
   pull_request:
     paths:
       - 'apps/yeoreojwo/**'
       - '.github/workflows/yeoreojwo.yml'
+      - '.github/tools/yeoreojwo-http-runtime/**'
 
 permissions:
   contents: read
@@ -21,6 +23,8 @@ jobs:
   verify:
     runs-on: ubuntu-latest
     timeout-minutes: 15
+    env:
+      YEOREOJWO_WRANGLER_CLI: ${{ github.workspace }}/.github/tools/yeoreojwo-http-runtime/node_modules/wrangler/bin/wrangler.js
     defaults:
       run:
         working-directory: apps/yeoreojwo
@@ -34,8 +38,13 @@ jobs:
         with:
           node-version: '24'
           cache: npm
-          cache-dependency-path: apps/yeoreojwo/package-lock.json
+          cache-dependency-path: |
+            apps/yeoreojwo/package-lock.json
+            .github/tools/yeoreojwo-http-runtime/package-lock.json
       - name: Install locked dependencies
+        run: npm ci --no-audit --no-fund
+      - name: Install isolated HTTP test runtime
+        working-directory: .github/tools/yeoreojwo-http-runtime
         run: npm ci --no-audit --no-fund
       - name: Check types
         run: npm run typecheck
@@ -44,14 +53,15 @@ jobs:
       - name: Build
         run: npm run build
       - name: Prepare local D1 for HTTP checks
-        run: node --import ./scripts/sites-env.mjs ./node_modules/wrangler/bin/wrangler.js d1 execute DB --local --config dist/server/wrangler.json --persist-to .wrangler/state --file drizzle/0000_famous_toro.sql
+        run: node --import ./scripts/sites-env.mjs "$YEOREOJWO_WRANGLER_CLI" d1 execute DB --local --config dist/server/wrangler.json --persist-to .wrangler/state --file drizzle/0000_famous_toro.sql
       - name: Check HTTP API with local D1
         shell: bash
         run: |
-          # Restore Wrangler's dev-only request-body draining middleware for the
-          # prebuilt no_bundle worker. Production artifacts are unchanged.
+          # Use the pinned runtime containing the unread-body connection fix.
+          # Keep the generated no_bundle artifact unchanged for these checks.
           # https://github.com/cloudflare/workers-sdk/issues/15203
-          npm run start -- --port 4173 --bundle=true --log-level debug > "$RUNNER_TEMP/yeoreojwo-http-server.log" 2>&1 &
+          node --import ./scripts/sites-env.mjs "$YEOREOJWO_WRANGLER_CLI" --version
+          node --import ./scripts/sites-env.mjs "$YEOREOJWO_WRANGLER_CLI" dev --config dist/server/wrangler.json --local --persist-to .wrangler/state --ip 127.0.0.1 --inspector-port 0 --port 4173 --log-level debug > "$RUNNER_TEMP/yeoreojwo-http-server.log" 2>&1 &
           ci_server_pid=$!
           trap 'kill "$ci_server_pid" 2>/dev/null || true' EXIT
           node --input-type=module <<'NODE'
