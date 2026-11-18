@@ -48,7 +48,10 @@ jobs:
       - name: Check HTTP API with local D1
         shell: bash
         run: |
-          npm run start -- --port 4173 --log-level debug > "$RUNNER_TEMP/yeoreojwo-http-server.log" 2>&1 &
+          # Restore Wrangler's dev-only request-body draining middleware for the
+          # prebuilt no_bundle worker. Production artifacts are unchanged.
+          # https://github.com/cloudflare/workers-sdk/issues/15203
+          npm run start -- --port 4173 --bundle=true --log-level debug > "$RUNNER_TEMP/yeoreojwo-http-server.log" 2>&1 &
           ci_server_pid=$!
           trap 'kill "$ci_server_pid" 2>/dev/null || true' EXIT
           node --input-type=module <<'NODE'
@@ -81,15 +84,30 @@ jobs:
             ['{', 'INVALID_JSON'],
             ['{"action":"diagnostic-unknown","requestId":"no-record"}', 'INVALID_ACTION'],
           ];
-          for (const [body, expectedCode] of invalidBodies) {
+          async function expectRejection(body, expectedStatus, expectedCode, headers = probeHeaders) {
             const response = await fetch('http://127.0.0.1:4173/api/platform', {
-              method: 'POST', headers: probeHeaders, body, signal: AbortSignal.timeout(5000),
+              method: 'POST', headers, body, signal: AbortSignal.timeout(5000),
             });
             const raw = await response.text();
-            assert.equal(response.status, 400, `Expected invalid body rejection, got ${response.status}: ${raw.slice(0,300)}`);
+            assert.equal(response.status, expectedStatus, `Expected ${expectedCode}, got ${response.status}: ${raw.slice(0,300)}`);
             assert.equal(JSON.parse(raw).code, expectedCode);
+          }
+          for (const [body, expectedCode] of invalidBodies) {
+            await expectRejection(body, 400, expectedCode);
             console.log('PASS invalid HTTP body:', expectedCode);
           }
+          // Each early rejection must leave the next POST usable. The 8 KiB body
+          // exposes the observed unread-body connection loss; no request is retried.
+          // All probes reject before any database mutation.
+          const unreadBody = JSON.stringify({ action: 'profile', nickname: '연결검사', padding: 'x'.repeat(8192) });
+          const anonymousHeaders = { 'Content-Type': 'application/json', Origin: probeHeaders.Origin };
+          for (let round = 0; round < 10; round++) {
+            await expectRejection(unreadBody, 401, 'SIGN_IN_REQUIRED', anonymousHeaders);
+            await expectRejection('{', 400, 'INVALID_JSON');
+            await expectRejection(unreadBody, 403, 'INVALID_ORIGIN', { ...probeHeaders, Origin: 'https://wrong.example' });
+            await expectRejection('{', 400, 'INVALID_JSON');
+          }
+          console.log('PASS early-rejection connection regression: 20 consecutive rejection/follow-up pairs');
           NODE
           npm run test:http -- http://127.0.0.1:4173
       - name: Show local server diagnostics on failure
