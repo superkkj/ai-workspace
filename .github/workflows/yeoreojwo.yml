@@ -52,6 +52,7 @@ jobs:
           ci_server_pid=$!
           trap 'kill "$ci_server_pid" 2>/dev/null || true' EXIT
           node --input-type=module <<'NODE'
+          import assert from 'node:assert/strict';
           import { setTimeout } from 'node:timers/promises';
           let consecutiveHealthy = 0;
           let lastFailure = 'No healthy response yet';
@@ -76,11 +77,18 @@ jobs:
             'oai-authenticated-user-id': 'ci-read-only-diagnostic',
             'oai-authenticated-user-email': 'ci-read-only-diagnostic@example.invalid',
           };
-          for (const body of ['{', '{"action":"diagnostic-unknown","requestId":"no-record"}']) {
+          const invalidBodies = [
+            ['{', 'INVALID_JSON'],
+            ['{"action":"diagnostic-unknown","requestId":"no-record"}', 'INVALID_ACTION'],
+          ];
+          for (const [body, expectedCode] of invalidBodies) {
             const response = await fetch('http://127.0.0.1:4173/api/platform', {
               method: 'POST', headers: probeHeaders, body, signal: AbortSignal.timeout(5000),
             });
-            console.log('Non-mutating body diagnostic:', response.status, (await response.text()).slice(0,300));
+            const raw = await response.text();
+            assert.equal(response.status, 400, `Expected invalid body rejection, got ${response.status}: ${raw.slice(0,300)}`);
+            assert.equal(JSON.parse(raw).code, expectedCode);
+            console.log('PASS invalid HTTP body:', expectedCode);
           }
           NODE
           npm run test:http -- http://127.0.0.1:4173

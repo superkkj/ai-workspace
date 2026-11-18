@@ -23,7 +23,14 @@ async function call(actor, command, override = {}) {
     body: command ? JSON.stringify(command) : undefined,
     signal: AbortSignal.timeout(20_000),
   });
-  const data = await response.json();
+  const raw = await response.text();
+  let data;
+  try {
+    data = JSON.parse(raw);
+  } catch {
+    const action = command?.action ?? 'snapshot';
+    throw new Error(`HTTP ${response.status} (${action}) returned a non-JSON response: ${raw.slice(0, 240)}`);
+  }
   return { status: response.status, data };
 }
 async function success(actor, command) {

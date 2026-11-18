@@ -84,6 +84,53 @@ test('제안을 선택한 뒤 조건을 바꿀 다른 제안 선택·철회를 �
   await assert.rejects(f.service.execute('provider-private-id', { action: 'withdrawProposal', requestId: f.requestId, proposalId: providerId }), { code: 'STATE_CONFLICT' });
 });
 
+test('선택 전 제안을 철회하고 새 조건으로 다시 제안해 참가까지 이어 간다', async (t) => {
+  const f = await fixture(); t.after(() => f.database.close());
+  await f.service.execute('provider-private-id', { action: 'createProposal', requestId: f.requestId, input: f.input });
+  const withdrawnId = (await f.service.snapshot(null)).requests[0].proposals[0].id;
+  await f.service.execute('provider-private-id', { action: 'withdrawProposal', requestId: f.requestId, proposalId: withdrawnId });
+  const withdrawn = (await f.service.snapshot(null)).requests[0];
+  assert.equal(withdrawn.status, 'open');
+  assert.equal(withdrawn.selectedProposalId, null);
+  assert.equal(withdrawn.proposals.length, 0);
+
+  const revisedTerms = {
+    price: 35000,
+    startsAt: new Date(START + 8 * 86400000).toISOString(),
+    durationMinutes: 90,
+    location: '서울 마포구 새 공개 수업 공간',
+    minParticipants: 1,
+    capacity: 3,
+  };
+  await f.service.execute('provider-private-id', { action: 'createProposal', requestId: f.requestId, input: { ...f.input, ...revisedTerms } });
+  const proposed = (await f.service.snapshot('provider-private-id')).requests[0];
+  assert.equal(proposed.proposals.length, 1);
+  assert.equal(proposed.proposals[0].isMine, true);
+  const replacementId = proposed.proposals[0].id;
+  assert.notEqual(replacementId, withdrawnId);
+
+  await assert.rejects(f.service.execute('owner-private-id', { action: 'chooseProposal', requestId: f.requestId, proposalId: withdrawnId }), { code: 'NOT_FOUND', status: 404 });
+  const beforeSelection = (await f.service.snapshot(null)).requests[0];
+  assert.equal(beforeSelection.status, 'open');
+  assert.equal(beforeSelection.selectedProposalId, null);
+  await f.service.execute('owner-private-id', { action: 'chooseProposal', requestId: f.requestId, proposalId: replacementId });
+  assert.equal((await f.service.snapshot(null)).requests[0].confirmedCount, 0);
+
+  await f.service.execute('friend-private-id', { action: 'confirm', requestId: f.requestId });
+  const confirmed = (await f.service.snapshot('friend-private-id')).requests[0];
+  assert.equal(confirmed.status, 'confirming');
+  assert.equal(confirmed.selectedProposalId, replacementId);
+  assert.equal(confirmed.isConfirmed, true);
+  assert.equal(confirmed.confirmedCount, 1);
+  assert.equal(confirmed.proposals.length, 1);
+  const selected = confirmed.proposals[0];
+  assert.equal(selected.id, replacementId);
+  assert.equal(selected.isSelected, true);
+  assert.equal(selected.confirmedCount, 1);
+  const { price, startsAt, durationMinutes, location, minParticipants, capacity } = selected;
+  assert.deepEqual({ price, startsAt, durationMinutes, location, minParticipants, capacity }, revisedTerms);
+});
+
 test('마지막 한 자리에 동시에 신청해도 한 명만 확정되고 중복 클릭은 집계되지 않는다', async (t) => {
   const f = await fixture(); t.after(() => f.database.close());
   await f.choose();
@@ -147,6 +194,30 @@ test('완료는 종료 시각·최소 인원·기록자 권한을 모두 확인�
   await assert.rejects(f.service.execute('other-private-id', { action: 'complete', requestId: f.requestId }), { code: 'FORBIDDEN' });
   await f.service.execute('provider-private-id', { action: 'complete', requestId: f.requestId });
   assert.equal((await f.service.snapshot(null)).requests[0].status, 'completed');
+});
+
+test('최소 인원이 모여도 수업 시작과 종료 직전에는 완료할 수 없고 정확한 종료 시각부터 가능하다', async (t) => {
+  const f = await fixture(); t.after(() => f.database.close());
+  await f.choose();
+  for (const user of ['owner-private-id', 'friend-private-id']) await f.service.execute(user, { action: 'confirm', requestId: f.requestId });
+  const startsAt = Date.parse(f.input.startsAt);
+  const endsAt = startsAt + f.input.durationMinutes * 60_000;
+
+  // 인원 조건을 먼저 충족해 종료 시각 제한 자체를 확인한다.
+  for (const time of [startsAt, startsAt + 1, endsAt - 1]) {
+    f.setTime(time);
+    await assert.rejects(f.service.execute('owner-private-id', { action: 'complete', requestId: f.requestId }), { code: 'STATE_CONFLICT', status: 409 });
+    const ongoing = (await f.service.snapshot(null)).requests[0];
+    assert.equal(ongoing.status, 'confirming');
+    assert.equal(ongoing.confirmedCount, f.input.minParticipants);
+  }
+
+  f.setTime(endsAt);
+  await f.service.execute('provider-private-id', { action: 'complete', requestId: f.requestId });
+  const completed = (await f.service.snapshot(null)).requests[0];
+  assert.equal(completed.status, 'completed');
+  assert.equal(completed.confirmedCount, f.input.minParticipants);
+  assert.equal(completed.updatedAt, new Date(endsAt).toISOString());
 });
 
 test('데이터베이스 연결을 닫았다 열어도 요청과 참가가 유지된다', async (t) => {
