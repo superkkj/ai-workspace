@@ -24,6 +24,7 @@
 - [x] 실제 검사 명령과 결과를 적을 docs/ai/CHECKS.md 작성
 - [x] 공통 지침을 가져오는 CLAUDE.md 작성 및 공식 가져오기 문법 확인
 - [x] LESSONS.md에 반복 오류의 원인·검사·재발 방지 기록 기준 보완
+- [x] 개발 방식 문서를 커밋하고 원격 파일 8개를 다시 읽어 내용 일치 확인 — [반영 커밋](https://github.com/superkkj/ai-workspace/commit/e7cc9395b17edcf34f4a59608ef6c6af0d524c17)
 
 ## 이번에 정한 운영 방식
 
