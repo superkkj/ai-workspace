@@ -53,15 +53,23 @@ jobs:
           trap 'kill "$ci_server_pid" 2>/dev/null || true' EXIT
           node --input-type=module <<'NODE'
           import { setTimeout } from 'node:timers/promises';
-          let ready = false;
-          for (let attempt = 0; attempt < 40; attempt++) {
+          let consecutiveHealthy = 0;
+          let lastFailure = 'No healthy response yet';
+          for (let attempt = 0; attempt < 60 && consecutiveHealthy < 10; attempt++) {
             try {
               const response = await fetch('http://127.0.0.1:4173/api/platform', { signal: AbortSignal.timeout(2000) });
-              if (response.ok) { ready = true; break; }
-            } catch {}
+              const snapshot = await response.json();
+              if (!response.ok || !Array.isArray(snapshot.requests) || !snapshot.serverTime) {
+                throw new Error(`API readiness returned HTTP ${response.status}`);
+              }
+              consecutiveHealthy++;
+            } catch (error) {
+              consecutiveHealthy = 0;
+              lastFailure = String(error);
+            }
             await setTimeout(500);
           }
-          if (!ready) throw new Error('Local HTTP API did not become ready.');
+          if (consecutiveHealthy < 10) throw new Error(`Local HTTP API did not stabilize: ${lastFailure}`);
           NODE
           npm run test:http -- http://127.0.0.1:4173
       - name: Show local server diagnostics on failure
