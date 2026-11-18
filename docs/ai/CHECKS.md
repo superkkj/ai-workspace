@@ -8,7 +8,10 @@
 - 타입 검사 첫 실행은 ResumeIntent의 합친 discriminant 정의 때문에 실패했다. 각 kind를 분리한 union으로 수정한 뒤 `npm run typecheck` 성공.
 - Sites build helper로 production 빌드 성공. 이후 독립 코드 검토의 모달 복귀·안내 위치 수정은 최종 빌드와 CI에서 다시 확인할 예정이다.
 - 로컬 DB schema 조회를 빌드와 겹쳐 실행한 첫 시도는 생성 config가 지워지는 동안 ENOENT로 실패했다. 빌드 종료 후 순서대로 다시 실행해 기존 requests schema를 확인하고 새 migration만 적용한다.
-- GitHub의 실제 HTTP·브라우저 검사 및 최신 배포: 아직 결과 확인 전. 실행하지 않은 성공을 기록하지 않는다.
+- 첫 CI [44268963592](https://github.com/superkkj/ai-workspace/actions/runs/44268963592): 설치·타입·52개 테스트·빌드·migration·HTTP 11개 성공, 브라우저 로그인 복귀 전 snapshot 503으로 실패.
+- 진단 CI [44269904653](https://github.com/superkkj/ai-workspace/actions/runs/44269904653): 53개 테스트와 HTTP 11개 성공. 브라우저를 시작하기 전 기존 프로필+focused GET부터 실패하여 신규프로필/브라우저 특유 문제라는 가설을 제외했다. 서버의 개인정보 없는 stage/type/code 로그는 read-snapshot / Error / D1_ERROR·SQLITE_ERROR였다.
+- 실제 로컬 D1에 서비스 SQL을 직접 실행해 compound SELECT 제한을 재현했다. 5항 성공·6항 실패. 같은 ID 집합을 유지하며 focused 조건을 소유 요청 분기의 OR에 합쳐 수정했다. 실패 검사를 삭제하거나 서버 거절을 허용으로 바꾸지 않는다.
+- 이후 최종 CI·배포 결과는 완료 후 아래에 확정한다.
 - 실제 호스팅의 로그인 제공자·다계정 검사와 사용자 PC 실행은 미실행. CI 합성 사용자와 구분한다.
 
 ## 이전 첫 버전 완료 기록

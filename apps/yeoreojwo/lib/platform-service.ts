@@ -95,17 +95,19 @@ export class PlatformService {
     // Keep the public discovery feed bounded without making a member's older
     // activity disappear. Both reads use the exact same UNION of request IDs.
     const recentIds = 'SELECT id FROM (SELECT id FROM requests ORDER BY created_at DESC, id DESC LIMIT 200)';
+    // D1 permits at most five terms in one compound SELECT. The signed-in
+    // scope already uses all five, so include a shared request in the owner
+    // branch instead of appending a sixth UNION. Both reads use this same set.
     const personalIds = userId ? `${recentIds}
-      UNION SELECT id FROM requests WHERE owner_id = ?
+      UNION SELECT id FROM requests WHERE owner_id = ?${focusedId ? ' OR id = ?' : ''}
       UNION SELECT request_id FROM interests WHERE user_id = ?
       UNION SELECT request_id FROM proposals WHERE owner_id = ?
       UNION SELECT request_id FROM registrations WHERE user_id = ?` : recentIds;
     // A shared link includes at most one additional public request and its
     // proposals. The value remains a bound parameter, never SQL source.
-    const visibleIds = focusedId ? `${personalIds} UNION SELECT id FROM requests WHERE id = ?` : personalIds;
+    const visibleIds = focusedId && !userId ? `${personalIds} UNION SELECT id FROM requests WHERE id = ?` : personalIds;
     const visibleIdBindings = [
-      ...(userId ? [userId, userId, userId, userId] : []),
-      ...(focusedId ? [focusedId] : []),
+      ...(userId ? [userId, ...(focusedId ? [focusedId] : []), userId, userId, userId] : focusedId ? [focusedId] : []),
     ];
     const [requestResult, proposalResult, profileResult] = await this.db.batch([
       this.db.prepare(`SELECT r.*, p.nickname,

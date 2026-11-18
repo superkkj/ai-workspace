@@ -15,12 +15,14 @@ const [owner, provider, ...participants] = actors;
 const requestIds = [];
 let passed = 0;
 
-async function call(actor, command, override = {}) {
+async function call(actor, command, override = {}, focusedId) {
   const headers = { ...actor ? {
     'oai-authenticated-user-id': actor,
     'oai-authenticated-user-email': `${actor}@example.invalid`,
   } : {}, ...command ? { 'Content-Type': 'application/json', Origin: base.origin } : {}, ...override };
-  const response = await fetch(new URL('/api/platform', base), {
+  const endpoint = new URL('/api/platform', base);
+  if (focusedId) endpoint.searchParams.set('request', focusedId);
+  const response = await fetch(endpoint, {
     method: command ? 'POST' : 'GET', headers,
     body: command ? JSON.stringify(command) : undefined,
     signal: AbortSignal.timeout(20_000),
@@ -35,8 +37,8 @@ async function call(actor, command, override = {}) {
   }
   return { status: response.status, data };
 }
-async function success(actor, command) {
-  const response = await call(actor, command);
+async function success(actor, command, focusedId) {
+  const response = await call(actor, command, {}, focusedId);
   assert.equal(response.status, 200, response.data.error ?? response.data.code);
   return response.data;
 }
@@ -75,6 +77,17 @@ try {
   assert.ok(requestId); requestIds.push(requestId);
   assert.equal((await state(owner, requestId)).interestCount, 1);
   pass('request persisted with one owner interest');
+  const newcomer = `smoke-newcomer-${suffix}`;
+  for (const actor of [null, owner, provider, newcomer]) {
+    const focused = await success(actor, undefined, requestId);
+    const shared = focused.requests.find(request => request.id === requestId);
+    assert.ok(shared, 'A focused request must survive authenticated and anonymous snapshot queries.');
+    assert.equal(shared.isMine, actor === owner);
+    assert.equal(focused.viewer.signedIn, actor !== null);
+    assert.equal(focused.viewer.profileReady, actor === owner || actor === provider);
+    assert.equal(JSON.stringify(focused).includes(newcomer), false);
+  }
+  pass('shared request loads for owner, unrelated member, first login and anonymous visitor on D1');
   const duplicated = await Promise.all(Array.from({ length: 3 }, () => success(owner, creation)));
   assert.equal(duplicated.every((result) => result.requestId === requestId), true);
   const afterReplay = await success(owner);
