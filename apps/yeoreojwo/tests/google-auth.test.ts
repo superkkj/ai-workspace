@@ -4,7 +4,7 @@ import { generateKeyPairSync, createSign } from 'node:crypto';
 import { makePending, sealPending, parsePending, authConfig, googleAuthorizeUrl, verifyGoogleIdToken, secureCookie, SESSION_COOKIE } from '../lib/google-oauth.ts';
 import { safeReturnPath } from '../lib/navigation.ts';
 import { SqliteD1 } from './sqlite-d1.ts';
-import { createGoogleSession, revokeGoogleSession } from '../lib/google-auth.ts';
+import { createGoogleSession, revokeGoogleSession } from '../lib/google-session.ts';
 
 const config = { GOOGLE_CLIENT_ID: 'test.apps.googleusercontent.com', GOOGLE_CLIENT_SECRET: 'not-real', GOOGLE_REDIRECT_URI: 'https://example.com/api/auth/google/callback' };
 test('OAuth 설정은 정확한 HTTPS callback 주소를 요구한다', () => {
