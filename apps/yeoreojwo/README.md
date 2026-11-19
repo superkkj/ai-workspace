@@ -21,6 +21,11 @@
 
 ## Google 계정 로그인 (설정 후 활성화)
 
+**보안 주의:** `GOOGLE_CLIENT_ID`가 설정된 독립 Google OAuth 배포에서는 기존 ChatGPT 프록시 헤더 인증을 자동으로 비활성화합니다. 일반 공개 Cloudflare Worker에서 클라이언트가 보낸 `oai-authenticated-user-id` 등의 헤더를 신원 증명으로 사용하면 안 됩니다. 기존 ChatGPT Sites 전용 인증은 Google 설정이 없는, 접근 통제된 기존 Sites 배포에만 한정합니다. 이 두 로그인 방식을 하나의 공개 배포에서 동시에 허용하는 기능은 구현하지 않았습니다.
+
+**배포 전제:** 현재 호스팅 사이트는 소유자 전용이고, 이 대화에서는 Google Cloud·Cloudflare의 외부 계정 로그인과 비밀 설정을 대행할 수 없습니다. 새로운 Google OAuth 사이트를 독립 호스팅하려면 실제 호스트명·D1 연결 및 별도 배포 권한이 먼저 필요합니다. 기존 Sites의 소유자 전용 설정을 무단 변경하지 않습니다.
+
+
 Google OAuth 2.0 / OpenID Connect 로그인 코드는 `app/api/auth/google/`에 있고 기존 ChatGPT 로그인은 그대로 보존합니다. 새 Google 계정은 Google의 불변 `sub`를 `auth_accounts`의 내부 사용자 UUID와 연결합니다. **동일한 이메일이어도 기존 ChatGPT 계정 활동과 자동 연결하지 않습니다.** 계정 연결·이전 작업은 신원 확인 정책과 별도 마이그레이션이 정해질 때까지 진행하지 않습니다.
 
 1. Google Cloud Console의 Google Auth Platform에서 동의 화면과 **웹 애플리케이션 OAuth 클라이언트**를 만듭니다. 필요한 범위는 `openid email profile`이며 Gmail·Drive 접근 권한은 필요하지 않습니다.

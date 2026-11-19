@@ -1,5 +1,10 @@
 # 검사 명령과 결과
 
+## Google OAuth 공개 배포 인증 경계 — 2026-11-19
+
+- 독립적인 Google OAuth 모드에서는 클라이언트가 위조할 수 있는 기존 ChatGPT 프록시 헤더로 인증하지 않는 조건을 추가한다.
+- 이 검사는 코드·CI 범위이며, 실제 Google Cloud 자격 증명, 외부 호스팅 배포 또는 실계정 가입을 확인하지 않는다.
+
 ## Google OAuth 로그인 개발 검사 — 2026-11-19
 
 - 기준 작업 브랜치 `feat/yeoreojwo-google-oidc-20261119`, [PR #2](https://github.com/superkkj/ai-workspace/pull/2).

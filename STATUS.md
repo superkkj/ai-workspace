@@ -6,6 +6,12 @@
 - 기본 브랜치: `main`
 - 공개 범위: **Public** (2026-11-18 사용자 요청으로 전환)
 
+## 공개 Google OAuth 배포의 인증 헤더 차단 — 2026-11-19
+
+- Google OAuth가 설정된 Worker에서는 기존 ChatGPT 프록시 헤더를 인증으로 수용하지 않도록 차단했다. HTTP 요청자가 임의 작성할 수 있는 헤더로 다른 계정을 가장하지 못하도록 하기 위한 공개 운영 보안 조치다.
+- Google 설정이 없는 **기존 소유자 전용 Sites**에는 종전 ChatGPT 프록시 인증을 유지한다. 이 환경을 일반 외부에 그대로 공개하면 안 된다.
+- 별도 Cloudflare Worker와 Google OAuth 자격 증명·실제 URL은 아직 연결되지 않았다. 배포·실제 Google 계정 테스트는 미완료.
+
 ## Google OAuth 로그인 작업 — 2026-11-19
 
 - [x] Google OAuth 2.0 / OIDC authorization-code + PKCE(S256) / state·nonce 보호, Google RS256 ID 토큰 서명·aud·iss·exp 확인.

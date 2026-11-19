@@ -5,6 +5,7 @@ import { makePending, sealPending, parsePending, authConfig, googleAuthorizeUrl,
 import { safeReturnPath } from '../lib/navigation.ts';
 import { SqliteD1 } from './sqlite-d1.ts';
 import { createGoogleSession, revokeGoogleSession } from '../lib/google-session.ts';
+import { allowLegacyProxyIdentity } from '../lib/auth-policy.ts';
 
 const config = { GOOGLE_CLIENT_ID: 'test.apps.googleusercontent.com', GOOGLE_CLIENT_SECRET: 'not-real', GOOGLE_REDIRECT_URI: 'https://example.com/api/auth/google/callback' };
 test('OAuth 설정은 정확한 HTTPS callback 주소를 요구한다', () => {
@@ -63,4 +64,11 @@ test('Google sub 회원 매핑은 사용자별로 고정되고 세션은 서버�
   assert.equal(JSON.stringify(sessions).includes(first.token), false);
   await revokeGoogleSession(db.asD1(), first.token);
   assert.equal(db.sqlite.prepare('SELECT COUNT(*) AS count FROM auth_sessions').get()?.count, 2);
+});
+
+
+test('공개 Google OAuth 배포는 요청자가 임의로 보낼 수 있는 ChatGPT 헤더 인증을 사용하지 않는다', () => {
+  assert.equal(allowLegacyProxyIdentity({}), true); // Access-controlled ChatGPT Sites legacy mode only
+  assert.equal(allowLegacyProxyIdentity({ GOOGLE_CLIENT_ID: 'client.apps.googleusercontent.com' }), false);
+  assert.equal(allowLegacyProxyIdentity({ GOOGLE_CLIENT_ID: '  ' }), true);
 });
