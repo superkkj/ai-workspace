@@ -19,6 +19,20 @@
 
 2026-11-19 GitHub [PR #1](https://github.com/superkkj/ai-workspace/pull/1)을 통해 위 운영 개선 소스가 `main`에 병합됐고 [최종 CI](https://github.com/superkkj/ai-workspace/actions/runs/44467428520)에서 테스트 56개, HTTP 15개, 브라우저 6개, 타입 검사·빌드가 통과했습니다. **기존 Sites 앱은 소유자 전용이며 새 코드의 Sites 배포는 이 대화에서 수행·확인하지 못했습니다.** GitHub 코드가 곧바로 라이브 사이트에 반영됐다고 가정하지 마세요. 실계정 다인 사용과 사용자 PC 구동도 별도 검증 항목입니다.
 
+## Google 계정 로그인 (설정 후 활성화)
+
+Google OAuth 2.0 / OpenID Connect 로그인 코드는 `app/api/auth/google/`에 있고 기존 ChatGPT 로그인은 그대로 보존합니다. 새 Google 계정은 Google의 불변 `sub`를 `auth_accounts`의 내부 사용자 UUID와 연결합니다. **동일한 이메일이어도 기존 ChatGPT 계정 활동과 자동 연결하지 않습니다.** 계정 연결·이전 작업은 신원 확인 정책과 별도 마이그레이션이 정해질 때까지 진행하지 않습니다.
+
+1. Google Cloud Console의 Google Auth Platform에서 동의 화면과 **웹 애플리케이션 OAuth 클라이언트**를 만듭니다. 필요한 범위는 `openid email profile`이며 Gmail·Drive 접근 권한은 필요하지 않습니다.
+2. **실제 HTTPS 도메인**의 정확한 승인된 리디렉션 URI를 `https://<APP_HOST>/api/auth/google/callback`으로 등록합니다. 도메인/경로의 철자와 슬래시가 정확히 일치해야 합니다. 로컬 HTTP로 Google OAuth를 시험하려면 현재 HTTPS 고정 설계를 먼저 재검토해야 합니다.
+3. 배포 비밀값 관리 화면에 `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `GOOGLE_REDIRECT_URI`를 설정합니다. **절대로 GitHub, 프런트엔드 코드, CI 로그, 채팅에 Secret을 올리지 않습니다.** 설정이 없으면 Google 로그인 시작은 503 안내를 반환하며 기존 ChatGPT 로그인은 유지됩니다.
+4. 기존 D1 DB에 새로운 `drizzle/0002_google_auth.sql` 마이그레이션을 **한 번만** 적용합니다. 신규 DB는 0000→0001→0002 순서입니다. 기존 프로필·요청·참가 테이블은 변경하지 않습니다.
+5. HTTPS 배포 후 **Google 새 계정 로그인 → 닉네임 설정 → 요청 작성 → 새로고침 → 로그아웃 → 재로그인 → 동일 활동 확인**을 실제 계정으로 검증합니다. 운영 배포가 소유자 전용이면 방문자 공개를 별도로 허용하기 전에는 다른 사람 로그인 검증이 불가능합니다.
+
+구현은 authorization code, PKCE(S256), state·nonce, Google RS256 ID 토큰 서명·발급자·수신자·만료 확인을 사용합니다. 앱 세션은 원문을 DB에 저장하지 않고 SHA-256 해시로 저장하며 7일 만료·서버 로그아웃 삭제·HttpOnly/Secure/SameSite=Lax 쿠키를 사용합니다. Google 토큰을 DB에 저장하지 않습니다.
+
+**주의:** Google OAuth 코드를 GitHub에 반영하는 것과 실제 Google 로그인이 동작하는 것은 별개입니다. 현재 OAuth 클라이언트 정보 설정, 새 기능 배포, 실제 구글 계정 검증은 아직 끝나지 않았습니다. 비공개 Sites 접근 제한은 Google OAuth 코드와 별개입니다.
+
 ## 최신 상태와 작성 내용
 
 - 목록과 실제 요청 상세의 **새로고침**으로 다른 사람의 제안·참가·취소를 확인합니다. 브라우저 탭으로 돌아오거나 상세를 다시 열 때도 재조회합니다. 상시 실시간 알림은 아닙니다.
