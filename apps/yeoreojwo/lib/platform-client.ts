@@ -44,8 +44,11 @@ async function jsonRequest(url: string, command: PlatformCommand | undefined, op
   } finally { clearTimeout(timer); options.signal?.removeEventListener('abort', abort); }
 }
 
-export async function fetchSnapshot(requestId: string | null, options: Options = {}): Promise<PlatformSnapshot> {
-  const body = await jsonRequest(requestId ? `/api/platform?request=${encodeURIComponent(requestId)}` : '/api/platform', undefined, options);
+export async function fetchSnapshot(requestId: string | null, options: Options = {}, search?: string): Promise<PlatformSnapshot> {
+  const params = new URLSearchParams();
+  if (requestId) params.set('request', requestId);
+  if (search) params.set('search', search);
+  const body = await jsonRequest(`/api/platform${params.size ? `?${params.toString()}` : ''}`, undefined, options);
   if (!Array.isArray(body.requests) || !record(body.viewer) || typeof body.viewer.signedIn !== 'boolean' || typeof body.serverTime !== 'string' || !Number.isFinite(Date.parse(body.serverTime))) {
     throw new ClientError('최신 정보를 읽지 못했어요. 다시 불러와주세요.', 'server');
   }

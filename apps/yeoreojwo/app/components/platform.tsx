@@ -4,7 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Activity, ArrowRight, ArrowUpRight, BookOpen, CalendarDays, Check, CheckCircle2, ChefHat, ChevronDown, CircleHelp, Clock3, Heart, MapPin, Menu, MessageCircle, Mountain, Music2, Palette, Plus, RefreshCw, Search, Share2, Sparkles, Sprout, Users, Wallet, X } from 'lucide-react';
 import { CATEGORIES, STATUS_LABELS, type Category, type CommandResult, type PlatformCommand, type PlatformSnapshot, type ProposalView, type RequestStatus, type RequestView } from '../../lib/contracts';
 import { getExamples } from '../../lib/examples';
-import { ClientError, createSnapshotLoader, sendCommand } from '../../lib/platform-client';
+import { ClientError, createSnapshotLoader, fetchSnapshot, sendCommand } from '../../lib/platform-client';
 import { appPath, readNavigation, rememberLoginIntent, signInHref, takeLoginIntent, type ResumeIntent } from '../../lib/navigation';
 import { ActivityArt, HeroArt } from './illustrations';
 import { Modal } from './modal';
@@ -85,6 +85,9 @@ export default function Platform() {
   const [myFilter, setMyFilter] = useState<MyFilter>('created');
   const [category, setCategory] = useState<Category | 'all'>('all');
   const [query, setQuery] = useState('');
+  const [searchMatches, setSearchMatches] = useState<{ term: string; requests: RequestView[] } | null>(null);
+  const [searchPending, setSearchPending] = useState(false);
+  const [searchError, setSearchError] = useState('');
   const [region, setRegion] = useState('');
   const [status, setStatus] = useState('all');
   const [sort, setSort] = useState('latest');
@@ -224,7 +227,21 @@ export default function Platform() {
       else setNotice({text:'보던 요청으로 돌아왔어요. 관심 버튼을 눌러 참여 의사를 확인해주세요.',tone:'success'});
     }
   }, [snapshot]);
-  const source = mode === 'examples' ? examples : snapshot?.requests ?? [];
+  const trimmedQuery = query.trim();
+  const isRemoteSearch = mode === 'actual' && trimmedQuery.length >= 2;
+  useEffect(() => {
+    if (!isRemoteSearch) { setSearchMatches(null); setSearchPending(false); setSearchError(''); return; }
+    const controller = new AbortController();
+    setSearchPending(true); setSearchError('');
+    const timer = window.setTimeout(() => {
+      void fetchSnapshot(null, { signal: controller.signal }, trimmedQuery)
+        .then(result => { if (!controller.signal.aborted) setSearchMatches({ term: trimmedQuery, requests: result.requests }); })
+        .catch(error => { if (!controller.signal.aborted) setSearchError(error instanceof Error ? error.message : '전체 검색에 실패했어요.'); })
+        .finally(() => { if (!controller.signal.aborted) setSearchPending(false); });
+    }, 350);
+    return () => { window.clearTimeout(timer); controller.abort(); };
+  }, [trimmedQuery, isRemoteSearch, snapshot?.serverTime]);
+  const source = mode === 'examples' ? examples : isRemoteSearch && searchMatches?.term === trimmedQuery ? searchMatches.requests : snapshot?.requests ?? [];
   const visible = useMemo(() => source.filter(request => {
     if(mode === 'mine') {
       if(myFilter==='created' && !request.isMine) return false;
@@ -249,7 +266,7 @@ export default function Platform() {
       <div className="journey-strip"><div><span>01</span><p>하고 싶은 활동을 <strong>요청해요</strong></p></div><ArrowRight size={17}/><div><span>02</span><p>이웃과 함께 <strong>마음을 모아요</strong></p></div><ArrowRight size={17}/><div><span>03</span><p>운영자의 제안을 보고 <strong>참가해요</strong></p></div></div>
       <section id="browse" className="browse-section"><div className="browse-heading"><div><p className="section-eyebrow">A LITTLE IDEA, A NEW EXPERIENCE</p><h2>{mode==='mine'?'내가 함께하는 활동':'함께 열어볼까요?'} <span className="heading-star">✳</span></h2></div><button className="provider-link" onClick={()=>{chooseMode('actual');setStatus('open');setNotice({text:'관심 있는 요청을 열고 ‘수업 제안하기’를 선택해주세요.',tone:'success'});}}><Sprout size={18}/> 공방·강사로 제안하고 싶어요 <ArrowUpRight size={16}/></button></div>
         <div className="list-tabs" role="group" aria-label="요청 목록 선택"><button className={mode==='actual'?'selected':''} onClick={()=>chooseMode('actual')}>실제 모집 <span>{actualCount}</span></button><button className={mode==='examples'?'selected':''} onClick={()=>chooseMode('examples')}>예시 둘러보기 <Sparkles size={14}/></button><button className={mode==='mine'?'selected':''} onClick={()=>chooseMode('mine')}>내 활동 <Heart size={14}/></button></div>
-        {loadError && <div className="load-error" role="alert"><span>{loadError}</span><button className="text-button" onClick={refreshClick} disabled={loading}>{loading?'불러오는 중…':'다시 불러오기'}</button></div>}
+        {searchPending && isRemoteSearch && <p role="status">전체 요청에서 검색하고 있어요…</p>}{searchError && isRemoteSearch && <div role="alert" className="load-error">{searchError}</div>}{loadError && <div className="load-error" role="alert"><span>{loadError}</span><button className="text-button" onClick={refreshClick} disabled={loading}>{loading?'불러오는 중…':'다시 불러오기'}</button></div>}
         {mode==='examples'&&<div className="examples-banner"><Sparkles size={17}/><span><strong>이렇게 요청할 수 있어요.</strong> 아래는 서비스 이용을 돕는 예시이며, 실제 모집과 별개예요.</span><button onClick={createRequest} disabled={!snapshot}>내 요청 만들기 <ArrowRight size={15}/></button></div>}
         {mode==='mine'&&<div className="my-filters" role="group" aria-label="내 활동 종류">{([['created','내 요청'],['interested','관심 있는 활동'],['proposed','보낸 제안'],['confirmed','참가 확정']] as [MyFilter,string][]).map(([id,label])=><button key={id} className={myFilter===id?'selected':''} onClick={()=>setMyFilter(id)}>{label}</button>)}</div>}
         <div className="category-list" role="group" aria-label="활동 분야"><button className={category==='all'?'selected':''} onClick={()=>setCategory('all')} aria-pressed={category==='all'}><span className="category-symbol all-symbol"><Flower size={19}/></span>전체</button>{CATEGORIES.map(item=>{const Icon=categoryIcon[item.id];return <button key={item.id} className={category===item.id?'selected':''} onClick={()=>setCategory(item.id)} aria-pressed={category===item.id}><span className={`category-symbol symbol-${item.id}`}><Icon size={19}/></span>{item.label}</button>;})}</div>

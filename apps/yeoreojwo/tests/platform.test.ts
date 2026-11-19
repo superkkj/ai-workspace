@@ -20,7 +20,7 @@ async function fixture(path = ':memory:') {
   database.migrate();
   let now = START;
   let id = 0;
-  const service = new PlatformService(database.asD1(), { now: () => now, id: () => `fixture-${++id}` });
+  const service = new PlatformService(database.asD1(), { now: () => now, id: () => `fixture-${++id}`, maxDailyRequests: 1_000_000 });
   for (const [user, nickname] of [['owner-private-id', '요청이웃'], ['provider-private-id', '공방지기'], ['friend-private-id', '참여이웃'], ['other-private-id', '다른이웃']]) {
     await service.execute(user, { action: 'profile', nickname });
   }
@@ -436,4 +436,61 @@ test('이전 요청 공유 링크는 익명·다른 사용자에게도 해당 �
   assert.equal((await f.service.snapshot(null, "' OR 1=1 --")).requests.length, 200);
   await assert.rejects(f.service.snapshot(null, 'x'.repeat(101)), { code: 'INVALID_REQUEST_ID', status: 400 });
   await assert.rejects(f.service.snapshot(null, ''), { code: 'INVALID_REQUEST_ID', status: 400 });
+});
+
+test('공개 DB 전체 검색은 최신 200개 밖의 요청도 찾고 일반 목록은 유지한다', async (t) => {
+  const f = await fixture(); t.after(() => f.database.close());
+  const oldId = f.requestId;
+  for (let i = 0; i < 202; i++) {
+    await f.service.execute('other-private-id', {
+      action: 'createRequest',
+      input: { ...requestInput(), title: '검색되지 않는 일반 활동', description: '일반 활동을 위한 설명입니다.',
+        deadline: new Date(START + 7 * 86400000).toISOString() },
+    });
+  }
+  const ordinary = await f.service.snapshot(null);
+  assert.equal(ordinary.requests.some((r) => r.id === oldId), false);
+  const found = await f.service.snapshot(null, null, '초보 도자기');
+  assert.deepEqual(found.requests.map((r) => r.id), [oldId]);
+  assert.equal(found.requests[0].title, '초보 도자기 수업을 열어주세요');
+  const noMatch = await f.service.snapshot(null, null, '다른 검색어');
+  assert.equal(noMatch.requests.length, 0);
+  const own = await f.service.snapshot('owner-private-id', oldId, '도자기');
+  assert.equal(own.requests.some((r) => r.id === oldId), true);
+  await assert.rejects(f.service.snapshot(null, null, 'x'.repeat(81)), { code: 'INVALID_SEARCH', status: 400 });
+});
+
+test('일별 요청 제한은 새 요청만 차단하고 동일 저장 작업의 복구는 허용한다', async (t) => {
+  const f = await fixture(); t.after(() => f.database.close());
+  let id = 0;
+  const limited = new PlatformService(f.database.asD1(), { now: () => START, id: () => `limited-${++id}`, maxDailyRequests: 2 });
+  const command = { action: 'createRequest' as const, operationId, input: requestInput() };
+  const first = await limited.execute('owner-private-id', command);
+  assert.ok(first.requestId);
+  await assert.rejects(limited.execute('owner-private-id', { action: 'createRequest', operationId: anotherOperationId, input: requestInput() }),
+    { code: 'REQUEST_LIMIT', status: 429 });
+  assert.deepEqual(await limited.execute('owner-private-id', command), first);
+  assert.equal((await limited.snapshot('owner-private-id')).requests.length, 2);
+});
+
+test('확정 참가자 닉네임은 요청자와 선택 운영자에게만 보인다', async (t) => {
+  const f = await fixture(); t.after(() => f.database.close());
+  await f.choose();
+  await f.service.execute('friend-private-id', { action: 'confirm', requestId: f.requestId });
+  const manager = (await f.service.snapshot('owner-private-id')).requests[0];
+  const provider = (await f.service.snapshot('provider-private-id')).requests[0];
+  assert.deepEqual(manager.confirmedParticipants, ['참여이웃']);
+  assert.deepEqual(provider.confirmedParticipants, ['참여이웃']);
+  for (const viewer of [null, 'friend-private-id', 'other-private-id']) {
+    const view = (await f.service.snapshot(viewer)).requests[0];
+    assert.equal(Object.hasOwn(view, 'confirmedParticipants'), false);
+    assert.equal(view.confirmedCount, 1);
+  }
+  await f.service.execute('friend-private-id', { action: 'unconfirm', requestId: f.requestId });
+  const empty = (await f.service.snapshot('owner-private-id')).requests[0];
+  assert.equal(empty.confirmedCount, 0);
+  assert.equal(empty.confirmedParticipants, undefined);
+  await f.service.execute('friend-private-id', { action: 'confirm', requestId: f.requestId });
+  await f.service.execute('owner-private-id', { action: 'cancel', requestId: f.requestId, reason: '실험 종료' });
+  assert.deepEqual((await f.service.snapshot('provider-private-id')).requests[0].confirmedParticipants, ['참여이웃']);
 });

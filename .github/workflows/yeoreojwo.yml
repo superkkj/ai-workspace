@@ -47,9 +47,11 @@ jobs:
       - name: Install isolated HTTP and browser test runtime
         working-directory: .github/tools/yeoreojwo-http-runtime
         run: npm ci --no-audit --no-fund
-      - name: Install CI Chromium and system dependencies
+      - name: Install CI Chromium headless shell
+        # GitHub-hosted Ubuntu runner already has Chromium shared libraries.
+        # Avoid apt package installation, which can stall on mirror failures.
         working-directory: .github/tools/yeoreojwo-http-runtime
-        run: node ./node_modules/playwright/cli.js install --with-deps --only-shell chromium
+        run: node ./node_modules/playwright/cli.js install --only-shell chromium
       - name: Check types
         run: npm run typecheck
       - name: Check behavior and database rules

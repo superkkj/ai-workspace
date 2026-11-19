@@ -62,6 +62,8 @@ export type RequestView = RequestInput & {
   isConfirmed: boolean;
   interestCount: number;
   confirmedCount: number;
+  /** Only returned to the request owner and selected provider. Never public. */
+  confirmedParticipants?: string[];
   selectedProposalId: string | null;
   cancellationReason: string | null;
   proposals: ProposalView[];
