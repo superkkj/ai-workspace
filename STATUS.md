@@ -11,6 +11,7 @@
 - Google OAuth가 설정된 Worker에서는 기존 ChatGPT 프록시 헤더를 인증으로 수용하지 않도록 차단했다. HTTP 요청자가 임의 작성할 수 있는 헤더로 다른 계정을 가장하지 못하도록 하기 위한 공개 운영 보안 조치다.
 - Google 설정이 없는 **기존 소유자 전용 Sites**에는 종전 ChatGPT 프록시 인증을 유지한다. 이 환경을 일반 외부에 그대로 공개하면 안 된다.
 - 별도 Cloudflare Worker와 Google OAuth 자격 증명·실제 URL은 아직 연결되지 않았다. 배포·실제 Google 계정 테스트는 미완료.
+- [x] [PR #3](https://github.com/superkkj/ai-workspace/pull/3) `main` 병합 커밋 `4add958af3471fa569cb0bb17fa26e09e61e354c` 및 [CI 44473344644](https://github.com/superkkj/ai-workspace/actions/runs/44473344644) 61개 Node 테스트, 15개 D1 HTTP, 6개 브라우저 그룹·빌드 통과.
 
 ## Google OAuth 로그인 작업 — 2026-11-19
 
