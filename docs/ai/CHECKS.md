@@ -4,6 +4,7 @@
 
 - 독립적인 Google OAuth 모드에서는 클라이언트가 위조할 수 있는 기존 ChatGPT 프록시 헤더로 인증하지 않는 조건을 추가한다.
 - 이 검사는 코드·CI 범위이며, 실제 Google Cloud 자격 증명, 외부 호스팅 배포 또는 실계정 가입을 확인하지 않는다.
+- [CI 44473344644](https://github.com/superkkj/ai-workspace/actions/runs/44473344644) 성공: Node 61/61, D1 HTTP 15/15, Chromium 브라우저 6/6, 타입 검사·빌드. 병합 커밋 `4add958af3471fa569cb0bb17fa26e09e61e354c`.
 
 ## Google OAuth 로그인 개발 검사 — 2026-11-19
 
