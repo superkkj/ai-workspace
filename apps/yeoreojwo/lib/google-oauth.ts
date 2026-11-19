@@ -106,7 +106,7 @@ export async function verifyGoogleIdToken(token: string, audience: string, nonce
   const key = jwks.keys?.find(k => k.kid === header.kid && k.kty === 'RSA' && (!k.use || k.use === 'sig') && (!k.alg || k.alg === 'RS256'));
   if (!key) throw new Error('Google signing key not found');
   const publicKey = await crypto.subtle.importKey('jwk', key, { name: 'RSASSA-PKCS1-v1_5', hash: 'SHA-256' }, false, ['verify']);
-  const verified = await crypto.subtle.verify('RSASSA-PKCS1-v1_5', publicKey, decodedBase64Url(encodedSignature), new TextEncoder().encode(encodedHeader + '.' + encodedPayload));
+  const verified = await crypto.subtle.verify('RSASSA-PKCS1-v1_5', publicKey, decodedBase64Url(encodedSignature) as Uint8Array<ArrayBuffer>, new TextEncoder().encode(encodedHeader + '.' + encodedPayload));
   const seconds = Math.floor(now / 1000);
   if (!verified || !['accounts.google.com', 'https://accounts.google.com'].includes(String(claims.iss)) ||
       claims.aud !== audience || typeof claims.exp !== 'number' || claims.exp <= seconds ||
