@@ -180,6 +180,6 @@ export function CancelForm({ request, submit, busy, draftScope, onRefresh }: { r
   </FormFrame>;
 }
 
-export function SignInMessage({ href = '/signin-with-chatgpt?return_to=/' }: { href?: string }) {
-  return <div className="signin-message"><div className="signin-mark"><Check size={28}/></div><h3>내 이름으로 함께해요</h3><p>요청을 올리거나 참여하려면 로그인해주세요.<br/>로그인한 뒤 공개 닉네임을 정할 수 있어요.</p><a href={href} target="_top" className="button button-primary">ChatGPT로 로그인 <ArrowRight size={17}/></a></div>;
+export function SignInMessage({ href = '/signin-with-chatgpt?return_to=/', googleHref = '/api/auth/google/start?return_to=%2F' }: { href?: string; googleHref?: string }) {
+  return <div className="signin-message"><div className="signin-mark"><Check size={28}/></div><h3>내 이름으로 함께해요</h3><p>요청을 올리거나 참여하려면 로그인해주세요.<br/>로그인한 뒤 공개 닉네임을 정할 수 있어요.</p><a href={googleHref} target="_top" className="button button-primary">Google 계정으로 로그인 <ArrowRight size={17}/></a><a href={href} target="_top" className="button button-outline">기존 ChatGPT 로그인</a><p className="small-note">구글 로그인은 운영자 설정 후 이용할 수 있어요. 기존 ChatGPT 활동과 Google 계정은 자동으로 합쳐지지 않아요.</p></div>;
 }

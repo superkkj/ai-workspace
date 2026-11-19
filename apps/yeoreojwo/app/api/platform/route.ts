@@ -1,5 +1,5 @@
 import { env } from 'cloudflare:workers';
-import { getChatGPTUser } from '../../chatgpt-auth';
+import { getAuthenticatedUser } from '../../../lib/google-auth';
 import { DomainError, readMutationBody } from '../../../lib/domain';
 import { PlatformService, validateFocusedRequestId, validateSearchTerm } from '../../../lib/platform-service';
 
@@ -32,16 +32,16 @@ export async function GET(request: Request): Promise<Response> {
     const focusedRequestId = validateFocusedRequestId(url.searchParams.get('request'));
     const searchTerm = validateSearchTerm(url.searchParams.get('search'));
     stage = 'read-auth';
-    const user = await getChatGPTUser();
+    const user = await getAuthenticatedUser(request);
     stage = 'read-snapshot';
-    return response(await service().snapshot(user?.userId ?? null, focusedRequestId, searchTerm));
+    return response(await service().snapshot(user?.userId ?? null, focusedRequestId, searchTerm, user?.provider ?? null));
   } catch (error) { return failure(error, stage); }
 }
 
 export async function POST(request: Request): Promise<Response> {
   let stage = 'write-auth';
   try {
-    const user = await getChatGPTUser();
+    const user = await getAuthenticatedUser(request);
     if (!user) throw new DomainError('SIGN_IN_REQUIRED', '로그인하면 참여할 수 있어요.', 401);
     stage = 'write-body';
     const body = await readMutationBody(request);
