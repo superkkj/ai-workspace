@@ -250,10 +250,10 @@ export class PlatformService {
       ]);
       if (command.operationId) {
         const saved = await this.db.prepare('SELECT * FROM requests WHERE owner_id = ? AND operation_id = ?').bind(userId, command.operationId).first<RequestRow>();
-        if (!saved) throw new DomainError('REQUEST_LIMIT', '하루에 만들 수 있는 활동 요청 수를 초과했어요. 다음 날 다시 작성해 주세요.', 429);
+        if (!saved) throw new DomainError('REQUEST_LIMIT', '최근 24시간 동안 만들 수 있는 활동 요청 10건을 초과했어요. 이전 작성 시점부터 24시간이 지난 뒤 다시 시도해 주세요.', 429);
         return creationResult(saved, input);
       }
-      if (!created.meta.changes) throw new DomainError('REQUEST_LIMIT', '하루에 만들 수 있는 활동 요청 수를 초과했어요. 다음 날 다시 작성해 주세요.', 429);
+      if (!created.meta.changes) throw new DomainError('REQUEST_LIMIT', '최근 24시간 동안 만들 수 있는 활동 요청 10건을 초과했어요. 이전 작성 시점부터 24시간이 지난 뒤 다시 시도해 주세요.', 429);
       return { ok: true, requestId: id };
     }
 
