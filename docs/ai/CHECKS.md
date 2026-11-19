@@ -1,5 +1,15 @@
 # 검사 명령과 결과
 
+## 운영 준비 개선 — 2026-11-19
+
+- 대상: [PR #1](https://github.com/superkkj/ai-workspace/pull/1), squash 병합 `32ce541609d78e28ecf05d07012fa19a15cc0aa2`.
+- 검증 커밋: `9be070bf8ead9885f96dc3888a612fb92ea1170d` (main과 동일한 제품·검사 코드). CI 설정 변경도 포함한다.
+- [GitHub Actions #44467428520](https://github.com/superkkj/ai-workspace/actions/runs/44467428520) **전체 성공**: Node 24, `npm run typecheck`, `npm test` **56/56**, `npm run build`, 두 로컬 D1 migration, `npm run test:http -- http://127.0.0.1:4173` **15/15**, `node scripts/smoke-browser.mjs` **6/6**. 실험용 로컬 DB 기록 정리 성공.
+- 추가 HTTP 검사: DB 검색 및 잘못된 검색어 거절, 계정별 최근 24시간 신규 요청 제한과 동일 생성 키 재조회, 확정 참가자 닉네임의 요청자·운영자만 조회 가능 여부. 기존 중복 참가·정원·권한·로그인 복귀 검사도 유지한다.
+- 앞선 [CI #44466654407](https://github.com/superkkj/ai-workspace/actions/runs/44466654407)는 브라우저 시스템 패키지 설치 단계가 오래 지연되어 검사에 도달하지 못했다. Chromium만 설치하도록 설정한 [CI #44467125147](https://github.com/superkkj/ai-workspace/actions/runs/44467125147)은 테스트 56/56, HTTP 12/12, 브라우저 6/6으로 성공. 최종 CI에서는 추가 HTTP 3개까지 검증.
+- **미실행:** 새 병합 코드의 Sites 배포, 실제 ChatGPT 로그인 제공자, 실제 호스팅 D1 쓰기·부하, 다른 실제 계정의 3역할 참여, 사용자 PC의 설치·실행. CI 합성 사용자 검사 결과로 이를 대신했다고 주장하지 않는다.
+- 기존 사이트 https://yeoreojwo-superkkj.insightfulinlet4.chatgpt.site 는 **소유자 전용**이며, 새 병합 코드 배포는 확인되지 않았다.
+
 ## 다인 사용 개선 — 구현·검사·배포 완료 (2026-11-18)
 
 기준 main `a605ecb62456752681329e15844f00b8b982c9c8`에서 A/B/C 세 개선을 구현했다. 기준 상태·선정 이유·보류 항목은 [개선 문서](../product/yeoreojwo-improvements-20261118.md)를 참조한다. 아래는 이번 작업의 기록이며, 뒤의 첫 버전 기록과 구분한다.
