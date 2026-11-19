@@ -168,7 +168,11 @@ try {
   const member = await pageFor();
   await showRequest(member.page, requestId);
   await dialog(member.page).getByRole('button', { name: '관심 있어요', exact: true }).click();
-  const login = dialog(member.page).getByRole('link', { name: 'ChatGPT로 로그인' });
+  const googleLogin = dialog(member.page).getByRole('link', { name: 'Google 계정으로 로그인' });
+  const googleLoginUrl = new URL((await googleLogin.getAttribute('href'))!, base);
+  assert.equal(googleLoginUrl.pathname, '/api/auth/google/start');
+  assert.equal(googleLoginUrl.searchParams.get('return_to')?.startsWith('/'), true);
+  const login = dialog(member.page).getByRole('link', { name: '기존 ChatGPT 로그인' });
   const href = await login.getAttribute('href');
   const loginUrl = new URL(href, base);
   assert.equal(loginUrl.origin, base.origin);
