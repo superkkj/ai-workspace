@@ -6,6 +6,16 @@
 - 기본 브랜치: `main`
 - 공개 범위: **Public** (2026-11-18 사용자 요청으로 전환)
 
+## Google OAuth 로그인 작업 — 2026-11-19
+
+- [x] Google OAuth 2.0 / OIDC authorization-code + PKCE(S256) / state·nonce 보호, Google RS256 ID 토큰 서명·aud·iss·exp 확인.
+- [x] 기존 ChatGPT 로그인 유지 + 새 Google 계정의 별도 회원 ID·DB 세션(해시·만료·로그아웃). 이메일 일치만으로 과거 데이터 계정을 자동 병합하지 않음.
+- [x] `0002_google_auth.sql`의 회원·세션 테이블 추가. 기존 사용자·요청·제안·참가 데이터 스키마 유지.
+- [x] [PR #2](https://github.com/superkkj/ai-workspace/pull/2)에 코드·검사 추가. Google Client ID/Secret은 포함하지 않음.
+- [x] [GitHub Actions #44470345263](https://github.com/superkkj/ai-workspace/actions/runs/44470345263): Node 단위/SQL **60개**, 로컬 D1 HTTP **15개**, Chromium 브라우저 **6개** 및 타입·빌드 통과. 단위 테스트에서 가상 RS256 서명키/위조 JWT·nonce/issuer/audience/expiry·DB 계정/세션 삭제를 확인.
+- [ ] 실제 Google OAuth 클라이언트 자격 증명·리디렉션 HTTPS 도메인 설정, 호스팅 DB migration과 배포, 실제 Google 로그인 E2E는 **아직 수행하지 않음**. 비밀키를 Git에 넣지 않음.
+- [ ] 기존 ChatGPT 데이터와 Google 계정의 소유자 확인 후 명시적 연결·이전 절차는 설계하지 않음. 자동 병합 금지.
+
 ## 운영 준비 개선 — 2026-11-19
 
 - [x] 요청자·선택 운영자만 확정 참가자 **공개 닉네임**을 조회. 일반 방문자와 참가자에게는 인원 집계만 제공한다. 완료·취소 이후에도 기존 기록을 변경하지 않는다.
