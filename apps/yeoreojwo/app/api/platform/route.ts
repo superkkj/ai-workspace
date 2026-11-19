@@ -1,7 +1,7 @@
 import { env } from 'cloudflare:workers';
 import { getChatGPTUser } from '../../chatgpt-auth';
 import { DomainError, readMutationBody } from '../../../lib/domain';
-import { PlatformService, validateFocusedRequestId } from '../../../lib/platform-service';
+import { PlatformService, validateFocusedRequestId, validateSearchTerm } from '../../../lib/platform-service';
 
 export const dynamic = 'force-dynamic';
 
@@ -28,11 +28,13 @@ function failure(error: unknown, stage: string): Response {
 export async function GET(request: Request): Promise<Response> {
   let stage = 'read-link';
   try {
-    const focusedRequestId = validateFocusedRequestId(new URL(request.url).searchParams.get('request'));
+    const url = new URL(request.url);
+    const focusedRequestId = validateFocusedRequestId(url.searchParams.get('request'));
+    const searchTerm = validateSearchTerm(url.searchParams.get('search'));
     stage = 'read-auth';
     const user = await getChatGPTUser();
     stage = 'read-snapshot';
-    return response(await service().snapshot(user?.userId ?? null, focusedRequestId));
+    return response(await service().snapshot(user?.userId ?? null, focusedRequestId, searchTerm));
   } catch (error) { return failure(error, stage); }
 }
 

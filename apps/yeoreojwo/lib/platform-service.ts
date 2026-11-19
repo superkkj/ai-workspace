@@ -18,6 +18,7 @@ type ProposalRow = {
 
 type RequestListing = RequestRow & { nickname: string; interest_count: number; confirmed_count: number; my_interest: number; my_registration: number };
 type ProposalListing = ProposalRow & { nickname: string; confirmed_count: number };
+type ManagerRegistration = { request_id: string; nickname: string; created_at: number };
 const iso = (value: number) => new Date(value).toISOString();
 
 async function draftScope(userId: string | null): Promise<string | null> {
@@ -40,6 +41,15 @@ function creationResult(row: RequestRow, input: RequestInput): CommandResult {
   return { ok: true, requestId: row.id };
 }
 
+export function validateSearchTerm(value: string | null): string | null {
+  if (value === null || value.trim() === '') return null;
+  const query = value.trim();
+  if (query.length < 2 || query.length > 80 || /[\u0000-\u001F\u007F]/u.test(query)) {
+    throw new DomainError('INVALID_SEARCH', '검색어는 2~80자로 입력해 주세요.');
+  }
+  return query;
+}
+
 export function validateFocusedRequestId(value: string | null): string | null {
   if (value === null) return null;
   if (value.length < 1 || value.length > 100 || !value.trim()) {
@@ -57,10 +67,13 @@ export class PlatformService {
   private readonly clock: () => number;
   private readonly nextId: () => string;
 
-  constructor(db: PlatformDatabase, options: { now?: () => number; id?: () => string } = {}) {
+  private readonly maxDailyRequests: number;
+
+  constructor(db: PlatformDatabase, options: { now?: () => number; id?: () => string; maxDailyRequests?: number } = {}) {
     this.db = db;
     this.clock = options.now ?? Date.now;
     this.nextId = options.id ?? (() => crypto.randomUUID());
+    this.maxDailyRequests = options.maxDailyRequests ?? 10;
   }
 
   private async request(id: string): Promise<RequestRow> {
@@ -88,13 +101,21 @@ export class PlatformService {
     return this.proposal(request.selected_proposal_id, request.id);
   }
 
-  async snapshot(userId: string | null, focusedRequestId?: string | null): Promise<PlatformSnapshot> {
+  async snapshot(userId: string | null, focusedRequestId?: string | null, search?: string | null): Promise<PlatformSnapshot> {
     const user = userId ?? '';
     const now = this.clock();
     const focusedId = validateFocusedRequestId(focusedRequestId ?? null);
+    const searchTerm = validateSearchTerm(search ?? null);
+    const searchParameters = searchTerm ? [searchTerm, searchTerm, searchTerm] : [];
     // Keep the public discovery feed bounded without making a member's older
     // activity disappear. Both reads use the exact same UNION of request IDs.
-    const recentIds = 'SELECT id FROM (SELECT id FROM requests ORDER BY created_at DESC, id DESC LIMIT 200)';
+    const recentIds = searchTerm
+      ? `SELECT id FROM (SELECT id FROM requests
+          WHERE instr(lower(title), lower(?)) > 0
+             OR instr(lower(description), lower(?)) > 0
+             OR instr(lower(preferred_time), lower(?)) > 0
+          ORDER BY created_at DESC, id DESC LIMIT 200)`
+      : 'SELECT id FROM (SELECT id FROM requests ORDER BY created_at DESC, id DESC LIMIT 200)';
     // D1 permits at most five terms in one compound SELECT. The signed-in
     // scope already uses all five, so include a shared request in the owner
     // branch instead of appending a sixth UNION. Both reads use this same set.
@@ -109,7 +130,7 @@ export class PlatformService {
     const visibleIdBindings = [
       ...(userId ? [userId, ...(focusedId ? [focusedId] : []), userId, userId, userId] : focusedId ? [focusedId] : []),
     ];
-    const [requestResult, proposalResult, profileResult] = await this.db.batch([
+    const [requestResult, proposalResult, profileResult, managerRegistrationResult] = await this.db.batch([
       this.db.prepare(`SELECT r.*, p.nickname,
         (SELECT COUNT(*) FROM interests i WHERE i.request_id = r.id) AS interest_count,
         (SELECT COUNT(*) FROM registrations g WHERE g.request_id = r.id) AS confirmed_count,
@@ -117,17 +138,25 @@ export class PlatformService {
         (SELECT COUNT(*) FROM registrations g WHERE g.request_id = r.id AND g.user_id = ?) AS my_registration
         FROM requests r JOIN profiles p ON p.user_id = r.owner_id
         WHERE r.id IN (${visibleIds})
-        ORDER BY r.created_at DESC, r.id DESC`).bind(user, user, ...visibleIdBindings),
+        ORDER BY r.created_at DESC, r.id DESC`).bind(user, user, ...searchParameters, ...visibleIdBindings),
       this.db.prepare(`SELECT p.*, u.nickname,
         (SELECT COUNT(*) FROM registrations g WHERE g.proposal_id = p.id) AS confirmed_count
         FROM proposals p JOIN profiles u ON u.user_id = p.owner_id
         WHERE p.request_id IN (${visibleIds})
-        ORDER BY p.created_at ASC, p.id ASC`).bind(...visibleIdBindings),
+        ORDER BY p.created_at ASC, p.id ASC`).bind(...searchParameters, ...visibleIdBindings),
       this.db.prepare('SELECT nickname FROM profiles WHERE user_id = ?').bind(user),
+      this.db.prepare(`SELECT g.request_id, u.nickname, g.created_at
+        FROM registrations g
+        JOIN profiles u ON u.user_id = g.user_id
+        JOIN requests r ON r.id = g.request_id
+        JOIN proposals p ON p.id = r.selected_proposal_id AND p.id = g.proposal_id
+        WHERE (r.owner_id = ? OR p.owner_id = ?)
+        ORDER BY g.created_at ASC, g.user_id ASC`).bind(user, user),
     ]);
     const rows = requestResult.results as RequestListing[];
     const proposals = proposalResult.results as ProposalListing[];
     const profile = (profileResult.results as { nickname: string }[])[0];
+    const managerRegistrations = managerRegistrationResult.results as ManagerRegistration[];
     const requests: RequestView[] = rows.map((row) => ({
       id: row.id,
       title: row.title,
@@ -147,6 +176,9 @@ export class PlatformService {
       isConfirmed: row.my_registration > 0,
       interestCount: row.interest_count,
       confirmedCount: row.confirmed_count,
+      ...(userId && managerRegistrations.some((entry) => entry.request_id === row.id)
+        ? { confirmedParticipants: managerRegistrations.filter((entry) => entry.request_id === row.id).map((entry) => entry.nickname) }
+        : {}),
       selectedProposalId: row.selected_proposal_id,
       cancellationReason: row.cancellation_reason,
       proposals: proposals.filter((p) => p.request_id === row.id).map((p): ProposalView => ({
@@ -203,12 +235,14 @@ export class PlatformService {
     if (command.action === 'createRequest') {
       const id = this.nextId();
       const input = command.input;
-      await this.db.batch([
+      const [created] = await this.db.batch([
         this.db.prepare(`INSERT INTO requests
           (id, owner_id, operation_id, title, description, category, region, preferred_time, budget, target_people, deadline, status, created_at, updated_at)
-          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'open', ?, ?)
+          SELECT ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'open', ?, ?
+          WHERE (SELECT COUNT(*) FROM requests WHERE owner_id = ? AND created_at >= ?) < ?
           ON CONFLICT(owner_id, operation_id) DO NOTHING`)
-          .bind(id, userId, command.operationId ?? null, input.title, input.description, input.category, input.region, input.preferredTime, input.budget, input.targetPeople, Date.parse(input.deadline), now, now),
+          .bind(id, userId, command.operationId ?? null, input.title, input.description, input.category, input.region, input.preferredTime, input.budget, input.targetPeople, Date.parse(input.deadline), now, now,
+            userId, now - 86_400_000, this.maxDailyRequests),
         // A losing duplicate inserts no row or interest. The winning request and
         // its owner's first interest commit together in the same atomic batch.
         this.db.prepare(`INSERT INTO interests (request_id, user_id, created_at)
@@ -216,9 +250,10 @@ export class PlatformService {
       ]);
       if (command.operationId) {
         const saved = await this.db.prepare('SELECT * FROM requests WHERE owner_id = ? AND operation_id = ?').bind(userId, command.operationId).first<RequestRow>();
-        if (!saved) throw new Error('Creation result is not available.');
+        if (!saved) throw new DomainError('REQUEST_LIMIT', '하루에 만들 수 있는 활동 요청 수를 초과했어요. 다음 날 다시 작성해 주세요.', 429);
         return creationResult(saved, input);
       }
+      if (!created.meta.changes) throw new DomainError('REQUEST_LIMIT', '하루에 만들 수 있는 활동 요청 수를 초과했어요. 다음 날 다시 작성해 주세요.', 429);
       return { ok: true, requestId: id };
     }
 
