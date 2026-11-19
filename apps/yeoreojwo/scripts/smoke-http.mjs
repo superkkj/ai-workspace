@@ -15,13 +15,14 @@ const [owner, provider, ...participants] = actors;
 const requestIds = [];
 let passed = 0;
 
-async function call(actor, command, override = {}, focusedId) {
+async function call(actor, command, override = {}, focusedId, searchTerm) {
   const headers = { ...actor ? {
     'oai-authenticated-user-id': actor,
     'oai-authenticated-user-email': `${actor}@example.invalid`,
   } : {}, ...command ? { 'Content-Type': 'application/json', Origin: base.origin } : {}, ...override };
   const endpoint = new URL('/api/platform', base);
   if (focusedId) endpoint.searchParams.set('request', focusedId);
+  if (searchTerm) endpoint.searchParams.set('search', searchTerm);
   const response = await fetch(endpoint, {
     method: command ? 'POST' : 'GET', headers,
     body: command ? JSON.stringify(command) : undefined,
@@ -77,6 +78,13 @@ try {
   assert.ok(requestId); requestIds.push(requestId);
   assert.equal((await state(owner, requestId)).interestCount, 1);
   pass('request persisted with one owner interest');
+  const publicSearch = await call(null, undefined, {}, undefined, '도자기');
+  assert.equal(publicSearch.status, 200);
+  assert.ok(publicSearch.data.requests.some(row => row.id === requestId));
+  const badSearch = await call(null, undefined, {}, undefined, 'x'.repeat(81));
+  assert.equal(badSearch.status, 400);
+  assert.equal(badSearch.data.code, 'INVALID_SEARCH');
+  pass('D1 global search and invalid input rejection');
   const newcomer = `smoke-newcomer-${suffix}`;
   for (const actor of [null, owner, provider, newcomer]) {
     const focused = await success(actor, undefined, requestId);
@@ -102,6 +110,15 @@ try {
   assert.notEqual(intentional.requestId, requestId);
   assert.equal((await state(owner, requestId)).budget, creation.input.budget);
   pass('a deliberate new creation key makes a separate request');
+  for (let i = 0; i < 8; i++) {
+    const next = await success(owner, { ...creation, operationId: randomUUID() });
+    requestIds.push(next.requestId);
+  }
+  const excessive = await call(owner, { ...creation, operationId: randomUUID() });
+  assert.equal(excessive.status, 429);
+  assert.equal(excessive.data.code, 'REQUEST_LIMIT');
+  assert.equal((await success(owner, creation)).requestId, requestId, 'Replaying a committed request must be allowed after the quota.');
+  pass('D1 rolling 24-hour create limit preserves committed replay');
   await success(participants[0], { action: 'interest', requestId, interested: true });
   await success(participants[0], { action: 'interest', requestId, interested: true });
   assert.equal((await state(owner, requestId)).interestCount, 2);
@@ -126,6 +143,15 @@ try {
   assert.equal(attempts.filter((result) => result.status === 409).length, 1);
   assert.equal((await state(owner, requestId)).confirmedCount, 2);
   pass('concurrent HTTP confirmations never exceed capacity');
+  const managerView = await state(owner, requestId);
+  const providerView = await state(provider, requestId);
+  const participantNames = attempts.flatMap((result, index) => result.status === 200 ? [`동작검증${index + 3}`] : []);
+  assert.deepEqual(new Set(managerView.confirmedParticipants), new Set(participantNames));
+  assert.deepEqual(new Set(providerView.confirmedParticipants), new Set(participantNames));
+  for (const actor of [null, ...participants]) {
+    assert.equal(Object.hasOwn(await state(actor, requestId), 'confirmedParticipants'), false);
+  }
+  pass('D1 confirmed attendee nicknames visible only to owner and selected provider');
 
   const winner = participants[attempts.findIndex((result) => result.status === 200)];
   const waiting = participants[attempts.findIndex((result) => result.status === 409)];
