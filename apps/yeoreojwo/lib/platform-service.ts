@@ -101,7 +101,7 @@ export class PlatformService {
     return this.proposal(request.selected_proposal_id, request.id);
   }
 
-  async snapshot(userId: string | null, focusedRequestId?: string | null, search?: string | null): Promise<PlatformSnapshot> {
+  async snapshot(userId: string | null, focusedRequestId?: string | null, search?: string | null, provider?: 'google' | 'chatgpt' | null): Promise<PlatformSnapshot> {
     const user = userId ?? '';
     const now = this.clock();
     const focusedId = validateFocusedRequestId(focusedRequestId ?? null);
@@ -201,7 +201,7 @@ export class PlatformService {
       })),
     }));
     return {
-      viewer: { signedIn: Boolean(userId), nickname: profile?.nickname ?? '새로운 이웃', profileReady: Boolean(profile), draftScope: await draftScope(userId) },
+      viewer: { signedIn: Boolean(userId), nickname: profile?.nickname ?? '새로운 이웃', profileReady: Boolean(profile), draftScope: await draftScope(userId), provider: provider ?? null },
       requests,
       serverTime: iso(now),
     };

@@ -68,3 +68,17 @@ export const registrations = sqliteTable('registrations', {
   proposalId: text('proposal_id').notNull().references(() => proposals.id),
   createdAt: integer('created_at').notNull(),
 }, (table) => [primaryKey({ columns: [table.requestId, table.userId] })]);
+
+export const authAccounts = sqliteTable('auth_accounts', {
+  provider: text('provider').notNull(),
+  subject: text('subject').notNull(),
+  userId: text('user_id').notNull().unique(),
+  createdAt: integer('created_at').notNull(),
+}, (table) => [primaryKey({ columns: [table.provider, table.subject] })]);
+
+export const authSessions = sqliteTable('auth_sessions', {
+  tokenHash: text('token_hash').primaryKey(),
+  userId: text('user_id').notNull().references(() => authAccounts.userId),
+  createdAt: integer('created_at').notNull(),
+  expiresAt: integer('expires_at').notNull(),
+}, (table) => [index('auth_sessions_expiry_idx').on(table.expiresAt)]);

@@ -1,5 +1,15 @@
 # 검사 명령과 결과
 
+## Google OAuth 로그인 개발 검사 — 2026-11-19
+
+- 기준 작업 브랜치 `feat/yeoreojwo-google-oidc-20261119`, [PR #2](https://github.com/superkkj/ai-workspace/pull/2).
+- [CI #44470345263](https://github.com/superkkj/ai-workspace/actions/runs/44470345263) **전체 성공**: Node 24, `npm run typecheck` 통과, `npm test` **60/60**, `npm run build` 통과, 로컬 D1 migration 0000·0001·0002, 기존 HTTP **15/15**, Chromium **6/6** 통과. 인증 전용 새 단위 테스트 4개는 가상 서명키·변조 ID Token·nonce/state/expiry/audience·Google subject 계정/세션 저장·로그아웃 삭제를 다룸.
+- 첫 [CI #44469363659](https://github.com/superkkj/ai-workspace/actions/runs/44469363659)는 Web Crypto의 TypeScript BufferSource 타입 오류로 실패 → 서명 입력 타입 수정.
+- [CI #44469512745](https://github.com/superkkj/ai-workspace/actions/runs/44469512745)는 순수 Node 테스트가 Cloudflare 전용 모듈을 불러오면서 실패 → 세션 DB 로직을 별도 범용 모듈로 분리.
+- [CI #44469776779](https://github.com/superkkj/ai-workspace/actions/runs/44469776779)는 브라우저 로그인 버튼 명칭 변경 후 기존 locator가 찾지 못해 실패 → Google·기존 ChatGPT 링크를 모두 확인하도록 갱신.
+- [CI #44470151996](https://github.com/superkkj/ai-workspace/actions/runs/44470151996)는 브라우저 mjs에서 잘못 사용된 TypeScript 전용 `!` 문법으로 실패 → 문법을 고친 뒤 최종 CI 전체 통과.
+- **미실행:** 실제 Google OAuth Client ID/Secret, Google과의 네트워크 토큰 교환, 실제 Google 사용자 로그인·계정 재방문, 호스팅 Sites 신규 배포·원격 D1 migration. 인증용 공개 키는 테스트 시 생성한 일회성 가상 키이며 Google 실서명을 검증한 결과로 확대하지 않음.
+
 ## 운영 준비 개선 — 2026-11-19
 
 - 대상: [PR #1](https://github.com/superkkj/ai-workspace/pull/1), squash 병합 `32ce541609d78e28ecf05d07012fa19a15cc0aa2`.

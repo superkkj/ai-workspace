@@ -16,6 +16,7 @@ export type Viewer = {
   profileReady: boolean;
   /** Opaque per-account label for local drafts; never an authentication token. */
   draftScope: string | null;
+  provider?: 'google' | 'chatgpt' | null;
 };
 
 export type RequestInput = {
