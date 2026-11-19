@@ -1,6 +1,6 @@
 import { env } from 'cloudflare:workers';
 import { authConfig, CALLBACK_PATH, exchangeCode, OAUTH_COOKIE, parsePending, readCookie, removeCookie, secureCookie, SESSION_COOKIE, verifyGoogleIdToken } from '../../../../../lib/google-oauth';
-import { createGoogleSession } from '../../../../../lib/google-auth';
+import { createGoogleSession } from '../../../../../lib/google-session';
 export const dynamic = 'force-dynamic';
 
 export async function GET(request: Request): Promise<Response> {
